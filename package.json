@@ -1,0 +1,19 @@
+{
+  "name": "colson-arch-theme",
+  "version": "1.0.0",
+  "description": "Omarchy-grade theming for GNOME on Arch — and any GNOME distro. 133+ themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, live-preview picker, wallpaper rotation, day/night scheduling, true-black monochrome base.",
+  "bin": { "theme": "bin/theme", "colson-arch-theme": "bin/theme" },
+  "files": ["bin/", "manifest/", "completions/", "install.sh", "README.md", "LICENSE", "CHANGELOG.md"],
+  "scripts": {
+    "test": "python3 -m py_compile bin/theme && bin/theme --version && bin/theme help >/dev/null && bin/theme completions zsh >/dev/null",
+    "postinstall": "node -e \"console.log('\\ncolson-arch-theme installed. Next:  theme install   (then log out/in once)\\n')\""
+  },
+  "os": ["linux"],
+  "engines": { "node": ">=18" },
+  "repository": { "type": "git", "url": "git+https://github.com/colson0x1/colson-arch-theme.git" },
+  "homepage": "https://github.com/colson0x1/colson-arch-theme#readme",
+  "bugs": { "url": "https://github.com/colson0x1/colson-arch-theme/issues" },
+  "keywords": ["arch", "archlinux", "gnome", "gnome-shell", "theme", "themes", "omarchy", "wallpaper", "libadwaita", "ghostty", "neovim", "btop", "dotfiles", "ricing", "desktop", "colson"],
+  "author": "Colson (@colson0x1)",
+  "license": "MIT"
+}
