@@ -2,7 +2,7 @@
 pkgname=colson-arch-theme
 pkgver=1.0.0
 pkgrel=1
-pkgdesc="Omarchy-grade theming for GNOME on Arch — 133+ themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, picker, rotation, scheduling"
+pkgdesc="Omarchy-grade theming for GNOME on Arch — 133 themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, picker, rotation, scheduling"
 arch=('any')
 url="https://github.com/colson0x1/colson-arch-theme"
 license=('MIT')

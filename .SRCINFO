@@ -1,5 +1,5 @@
 pkgbase = colson-arch-theme
-	pkgdesc = Omarchy-grade theming for GNOME on Arch — 133+ themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, picker, rotation, scheduling
+	pkgdesc = Omarchy-grade theming for GNOME on Arch — 133 themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, picker, rotation, scheduling
 	pkgver = 1.0.0
 	pkgrel = 1
 	url = https://github.com/colson0x1/colson-arch-theme

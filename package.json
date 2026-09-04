@@ -1,7 +1,7 @@
 {
   "name": "colson-arch-theme",
-  "version": "1.0.0",
-  "description": "Omarchy-grade theming for GNOME on Arch \u2014 and any GNOME distro. 133+ themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, live-preview picker, wallpaper rotation, day/night scheduling, true-black monochrome base.",
+  "version": "1.0.1",
+  "description": "Omarchy-grade theming for GNOME on Arch Linux and any GNOME distro: 133 themes, 660 wallpapers, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, live-preview picker, wallpaper rotation, day/night scheduling, true-black Graphite base.",
   "bin": {
     "theme": "bin/theme",
     "colson-arch-theme": "bin/theme"

@@ -1,12 +1,38 @@
 # Changelog
 
-## 1.0.0 — 2026-09-04
+All notable changes to **colson-arch-theme** are documented here.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.0.1] — 2026-09-04
+
+### Fixed
+- Release alignment. The `v1.0.0` tag was cut one commit before the final 1.0.0 build that npm shipped, so a source build from the tag lacked `--dry-run` and the graceful error handling. 1.0.1 is cut from a single commit for npm and the PKGBUILD alike.
+
+### Changed
+- README rewritten around the one-command install — `npm i -g colson-arch-theme && theme install` up front and as the closing recap — with a pacman-native path through the shipped PKGBUILD, per-distro prerequisites, shell-completion setup, the GNOME extension table, a scripting reference, troubleshooting, and the versioning policy. Exact figures throughout: 133 themes (22 official, 111 community), 660 wallpapers.
+- `install.sh` gained `--help`.
+- This changelog adopts the Keep a Changelog format.
+
+### Removed
+- `CONTRIBUTING.md`. Adding a theme is documented in the README under "Bring Any Omarchy Theme"; the development loop is `./install.sh --no-sync`.
+
+## [1.0.0] — 2026-09-04
+
 Initial release.
-- Theme engine: whitelist extraction from `colors.toml` (both dialects), `ghostty.conf`, `alacritty.toml`, `kitty.conf`; 133/133 full palettes.
-- OS-wide application: wallpaper (+dark, +lock), generated GNOME Shell theme (User Themes), GTK apps (shipped `gtk.css` or generated libadwaita color sheet), accent + light/dark, Ghostty, Neovim hook, btop, icon variants.
-- Graphite: true-black monochrome OS base (shell + GTK + terminal), always one command away.
-- Browse: status dashboard, swatch grid, live-preview fzf picker, preview card, author screenshots.
-- Wallpaper: per-theme sets, random, rotation timer (`rotate`), day/night `schedule`.
-- Library: manifest-driven `sync` (official bundle + 117 community repos, parallel shallow clones), `add`, `update`, `remove`, `credits`.
-- System: idempotent `install` (hooks, timer, curated GNOME extension set, desktop polish), reversible `uninstall`, `doctor`, `icons` (pacman/yay/paru/apt/dnf), `export`/`import`, shell completions, `--json`/`--plain`.
-- Packaging: npm (`colson-arch-theme`), AUR PKGBUILD, from-source installer.
+
+### Added
+- **Theme engine** — whitelist extraction from `colors.toml` (both dialects), `ghostty.conf`, `alacritty.toml`, `kitty.conf`; full 16-color palettes for 133/133 themes.
+- **OS-wide application** — wallpaper (+dark, +lock screen), generated GNOME Shell theme (User Themes), GTK apps (shipped `gtk.css` or a generated libadwaita color sheet), accent + light/dark, Ghostty, Neovim hook, btop, icon variants.
+- **Graphite** — true-black monochrome OS base (shell + GTK + terminal), always one command away.
+- **Browse** — status dashboard, swatch grid, live-preview fzf picker, preview card, author screenshots.
+- **Wallpaper** — per-theme sets, random, rotation timer (`rotate`), day/night `schedule`.
+- **Library** — manifest-driven `sync` (official bundle + community repositories, parallel shallow clones), `add`, `update`, `remove`, `credits`.
+- **System** — idempotent `install` (hooks, timer, curated GNOME extension set, desktop polish), reversible `uninstall`, `doctor`, `icons` (pacman/yay/paru/apt/dnf), `export`/`import`, shell completions for zsh/bash/fish, `--json`/`--plain`.
+- **`--dry-run`** on every state-changing command; every error path exits non-zero with a one-line message, never a traceback.
+- **Packaging** — npm (`colson-arch-theme`), PKGBUILD for pacman-native installs, from-source installer.
+
+[Unreleased]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/colson0x1/colson-arch-theme/releases/tag/v1.0.0
