@@ -1,0 +1,23 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: compile
+        run: python3 -m py_compile bin/theme
+      - name: smoke (no GNOME on CI — only non-gsettings commands)
+        run: |
+          bin/theme --version
+          bin/theme help > /dev/null
+          bin/theme completions zsh > /dev/null
+          bin/theme completions bash > /dev/null
+          bin/theme completions fish > /dev/null
+          bin/theme credits --plain > /dev/null
+      - name: manifest is well-formed
+        run: grep -vE '^#|^$' manifest/themes.txt | awk 'NF!=2{print "bad line: " $0; bad=1} END{exit bad}'
+      - name: shellcheck
+        run: sudo apt-get install -y shellcheck >/dev/null && shellcheck install.sh
