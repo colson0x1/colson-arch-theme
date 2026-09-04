@@ -100,6 +100,8 @@ This project fixes that, and goes further than a color swap:
 
 `theme help` is a full manual with grouped sections; `theme help <command>` is a deep-dive with examples.
 
+> 🧪 **`--dry-run`** works on every state-changing command (`install`, `uninstall`, any theme apply, `schedule`, `rotate`, `sync`). It prints exactly what would change — gsettings writes, systemd units, clones — and touches nothing. Combine with `--json` / `--plain` for scripting, and `NO_COLOR=1` for plain output.
+
 ## 🛠️ Installation
 
 ### Requirements
@@ -209,6 +211,15 @@ theme doctor                         # verify the whole stack is green
 ```bash
 theme uninstall            # reverses hooks, timers and GTK overrides; keeps the library
 theme uninstall --purge    # also removes the library and state
+```
+
+## ✅ Verified
+
+Every documented flow is exercised against a throwaway `$HOME` before release — install (twice, for idempotence), apply, Graphite, wallpaper, `list --plain/--json`, preview, `doctor --json`, schedule, export→import, completions, uninstall — plus ten error paths that must fail with a one-line message and a non-zero exit, never a traceback. The npm tarball is installed to a scratch prefix and run from there; the PKGBUILD is built with `makepkg` and its contents inspected.
+
+```bash
+theme doctor -v      # your own machine, any time
+npm test             # parse + smoke, no GNOME required
 ```
 
 ## 🤝 Contributing

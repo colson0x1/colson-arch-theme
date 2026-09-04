@@ -1,0 +1,24 @@
+pkgbase = colson-arch-theme
+	pkgdesc = Omarchy-grade theming for GNOME on Arch — 133+ themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, picker, rotation, scheduling
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/colson0x1/colson-arch-theme
+	arch = any
+	license = MIT
+	depends = python>=3.11
+	depends = git
+	depends = gnome-shell
+	depends = glib2
+	optdepends = fzf: interactive picker (theme pick)
+	optdepends = ghostty: terminal palette integration
+	optdepends = neovim: colorscheme hook
+	optdepends = btop: btop theme sync
+	optdepends = uv: installs the GNOME extension set via gext
+	optdepends = papirus-icon-theme: icon theme fallback
+	optdepends = yaru-icon-theme: per-theme icon variants
+	optdepends = adw-gtk-theme: GTK3 apps follow the theme
+	optdepends = bibata-cursor-theme: cursor theme
+	source = colson-arch-theme-1.0.0.tar.gz::https://github.com/colson0x1/colson-arch-theme/archive/v1.0.0.tar.gz
+	sha256sums = d8dab8613474c8ea89f43a240084bd9608074e78cc3f746b6eb8f33bfbfd099b
+
+pkgname = colson-arch-theme

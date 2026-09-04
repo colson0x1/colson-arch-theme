@@ -101,6 +101,7 @@ def migrate():
 
 # ─────────────────────────────── ui ──────────────────────────────────────────
 PLAIN = ("--plain" in sys.argv) or ("--json" in sys.argv)
+DRY = "--dry-run" in sys.argv
 
 
 def _color_ok():
@@ -147,8 +148,19 @@ def credit():
 
 
 def gset(schema, key, val, schemadir=None):
+    if DRY:
+        print(f"  [dry-run] gsettings set {schema} {key} {val}")
+        return True
     cmd = ["gsettings"] + (["--schemadir", str(schemadir)] if schemadir else []) + ["set", schema, key, val]
     return subprocess.run(cmd, capture_output=True, text=True).returncode == 0
+
+
+def userctl(*args):
+    """systemctl --user for state-changing calls; a no-op under --dry-run."""
+    if DRY:
+        print("  [dry-run] systemctl --user " + " ".join(args))
+        return True
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True).returncode == 0
 
 
 def gget(schema, key):
@@ -752,6 +764,9 @@ def manifest_entries():
 def clone(url, dest):
     if dest.exists():
         return "present"
+    if DRY:
+        print(f"  [dry-run] git clone {url}")
+        return "dry-run"
     r = subprocess.run(["git", "clone", "--depth", "1", "--quiet", url, str(dest)],
                        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"}, capture_output=True)
     return "ok" if r.returncode == 0 else "failed"
@@ -771,7 +786,7 @@ def cmd_sync(official_only=False, jobs=8):
     with ThreadPoolExecutor(max_workers=jobs) as ex:
         for name, res in zip([n for n, _ in entries], ex.map(lambda e: clone(e[1], THEMES / e[0]), entries)):
             results[name] = res
-    ok = sum(1 for v in results.values() if v in ("ok", "present"))
+    ok = sum(1 for v in results.values() if v in ("ok", "present", "dry-run"))
     failed = [n for n, v in results.items() if v == "failed"]
     print(f" {B('done')} {ok}/{len(entries)} available" + (f" · unavailable: {', '.join(failed)}" if failed else ""))
     credit()
@@ -871,14 +886,14 @@ def unit_write(name, service, timer):
     (SYSTEMD_USER / f"{name}.service").write_text(service)
     if timer:
         (SYSTEMD_USER / f"{name}.timer").write_text(timer)
-    subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+    userctl("daemon-reload")
 
 
 def rotation_units(minutes):
     unit_write("wallpaper-rotate",
                f"[Unit]\nDescription={APP}: rotate GNOME wallpaper within the active theme\n[Service]\nType=oneshot\nExecStart={SCRIPT} next-wall\n",
                f"[Unit]\nDescription={APP}: wallpaper rotation every {minutes} minutes\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec={minutes}min\n[Install]\nWantedBy=timers.target\n")
-    subprocess.run(["systemctl", "--user", "enable", "--now", "wallpaper-rotate.timer"], capture_output=True)
+    userctl("enable", "--now", "wallpaper-rotate.timer")
 
 
 def gext_bin():
@@ -944,7 +959,9 @@ def cmd_install(no_sync=False, no_extensions=False, minutes=30):
     rotation_units(minutes)
     print(f"   timer: wallpaper rotation every {minutes} min")
     new_ext = 0
-    if not no_extensions:
+    if not no_extensions and DRY:
+        print(f"  [dry-run] would install {len(EXTENSIONS)} GNOME extensions and configure the desktop")
+    elif not no_extensions:
         gx = ensure_gext()
         if not gx:
             print("   extensions: gext unavailable (install uv or pipx) — skipped; rerun later")
@@ -985,10 +1002,10 @@ def cmd_uninstall(purge=False):
     if sd.exists():
         gset("org.gnome.shell.extensions.user-theme", "name", "", schemadir=sd)
     for u in ("wallpaper-rotate.timer", "theme-schedule.timer"):
-        subprocess.run(["systemctl", "--user", "disable", "--now", u], capture_output=True)
+        userctl("disable", "--now", u)
     for f in ("wallpaper-rotate.service", "wallpaper-rotate.timer", "theme-schedule.service", "theme-schedule.timer"):
         (SYSTEMD_USER / f).unlink(missing_ok=True)
-    subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+    userctl("daemon-reload")
     if purge:
         shutil.rmtree(DATA, ignore_errors=True)
         shutil.rmtree(STATE, ignore_errors=True)
@@ -1080,7 +1097,7 @@ def cmd_doctor(verbose=False, as_json=False):
 
 def cmd_rotate(arg):
     if arg in ("off", "stop"):
-        subprocess.run(["systemctl", "--user", "disable", "--now", "wallpaper-rotate.timer"], capture_output=True)
+        userctl("disable", "--now", "wallpaper-rotate.timer")
         print("rotation: off")
         return
     try:
@@ -1098,7 +1115,7 @@ def cmd_schedule(args):
         return
     if args[0] == "off":
         f.unlink(missing_ok=True)
-        subprocess.run(["systemctl", "--user", "disable", "--now", "theme-schedule.timer"], capture_output=True)
+        userctl("disable", "--now", "theme-schedule.timer")
         print("schedule: off")
         return
     if args[0] == "apply":
@@ -1120,7 +1137,7 @@ def cmd_schedule(args):
         unit_write("theme-schedule",
                    f"[Unit]\nDescription={APP}: apply the scheduled theme\n[Service]\nType=oneshot\nExecStart={SCRIPT} schedule apply\n",
                    f"[Unit]\nDescription={APP}: day/night theme schedule\n[Timer]\nOnBootSec=1min\nOnCalendar=*:0/5\n[Install]\nWantedBy=timers.target\n")
-        subprocess.run(["systemctl", "--user", "enable", "--now", "theme-schedule.timer"], capture_output=True)
+        userctl("enable", "--now", "theme-schedule.timer")
         print("schedule: " + " · ".join(slots) + D("  (checked every 5 min)"))
         return
     sys.exit("usage: theme schedule [set HH:MM=theme … | off]")
@@ -1134,7 +1151,13 @@ def cmd_export():
 
 
 def cmd_import(path):
-    d = json.loads(pathlib.Path(path).read_text())
+    f = pathlib.Path(path)
+    if not f.exists():
+        sys.exit(f"no such file: {path}")
+    try:
+        d = json.loads(f.read_text())
+    except json.JSONDecodeError as e:
+        sys.exit(f"not valid JSON: {path} ({e.msg})")
     for line in d.get("local_manifest", []):
         parts = line.split()
         if len(parts) == 2 and not (THEMES / parts[0]).exists():
@@ -1249,7 +1272,7 @@ def cmd_help(topic=None):
     print(f"   {D('state'):<20} {STATE}")
     print(f"   {D('shell themes'):<20} {SHELL_THEMES}/theme-<name>/")
     print(f" {rule()}")
-    print(f" {D('NO_COLOR=1 / non-TTY disables color · FORCE_COLOR=1 forces it')}   {D('·')}   {D(REPO_URL)}")
+    print(f" {D('NO_COLOR=1 / non-TTY disables color · FORCE_COLOR=1 forces it · --dry-run prints what would change')}   {D('·')}   {D(REPO_URL)}")
     credit()
     print()
 
@@ -1319,7 +1342,7 @@ complete -F _theme theme
 
 # ─────────────────────────────── dispatch ────────────────────────────────────
 def main(argv):
-    a = [x for x in argv if x not in ("--plain", "--json")]
+    a = [x for x in argv if x not in ("--plain", "--json", "--dry-run")]
     as_json = "--json" in argv
     plain = "--plain" in argv
     if not a:
@@ -1339,9 +1362,14 @@ def main(argv):
     if c == "show":
         return cmd_show(rest[0] if rest else active_name())
     if c == "random":
-        return apply(random.choice(list(themes())), "random")
+        ns = list(themes())
+        if not ns:
+            sys.exit("library is empty — run: theme sync")
+        return apply(random.choice(ns), "random")
     if c == "next":
         ns = list(themes())
+        if not ns:
+            sys.exit("library is empty — run: theme sync")
         cur = active_name()
         return apply(ns[(ns.index(cur) + 1) % len(ns)] if cur in ns else ns[0], "first")
     if c == "graphite":
@@ -1390,3 +1418,6 @@ if __name__ == "__main__":
         main(sys.argv[1:])
     except KeyboardInterrupt:
         sys.exit(130)
+    except (FileNotFoundError, PermissionError, NotADirectoryError, OSError) as e:
+        print(f"theme: {e}", file=sys.stderr)
+        sys.exit(1)

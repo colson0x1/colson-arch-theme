@@ -17,7 +17,7 @@ optdepends=('fzf: interactive picker (theme pick)'
             'adw-gtk-theme: GTK3 apps follow the theme'
             'bibata-cursor-theme: cursor theme')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('d8dab8613474c8ea89f43a240084bd9608074e78cc3f746b6eb8f33bfbfd099b')
 
 package() {
   cd "$pkgname-$pkgver"
