@@ -5,12 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Fixed
-- Packaging. The `files` whitelist named the whole `bin/` directory, and npm's own rules say a path included through `files` cannot be excluded by `.npmignore` — so any stray file in that directory (Python bytecode, an editor backup) would ship. It now names `bin/theme` exactly. The redundant `.npmignore` is gone, and CI fails if the tarball ever contains anything other than the ten intended files.
-
 ## [1.0.2] — 2026-09-05
 
 ### Fixed
+- Packaging. The `files` whitelist named the whole `bin/` directory, and npm's own rules say a path included through `files` cannot be excluded by `.npmignore` — so any stray file in that directory (Python bytecode, an editor backup) would ship. It now names `bin/theme` exactly. The redundant `.npmignore` is gone, and CI fails if the tarball ever contains anything other than the ten intended files. The npm 1.0.2 tarball carries this fix; the `v1.0.2` tag predates it by one commit.
 - Neovim hook. It now applies at `VimEnter`, after every startup script, so a colorscheme set by your own plugins can no longer clobber it; it re-aligns on every later `:colorscheme`; and it clears the editor canvas (`Normal`, gutter, end-of-buffer, message area) to the terminal surface whenever the theme and the editor agree on light/dark. Neovim no longer sits in a differently colored box inside the terminal, and under Graphite the editor is true black. Scheme names are whitelisted before they reach Lua.
 - Ghostty wording. Ghostty re-reads its config only on `ctrl+shift+,`; new windows do not pick a theme up on their own. Help and README say so now, and the README explains how to get an edge-to-edge terminal: zero padding plus a cell height that divides the screen height, since padding is painted in the window color and `window-padding-color = extend` stretches whatever sits at the edge.
 
