@@ -32,6 +32,8 @@ jobs:
             }
             console.log('tarball contents match');
           "
+      - name: isolated end-to-end (throwaway HOME, stubbed desktop)
+        run: bash tests/isolated.sh
       - name: manifest is well-formed
         run: grep -vE '^#|^$' manifest/themes.txt | awk 'NF!=2{print "bad line: " $0; bad=1} END{exit bad}'
       - name: shellcheck

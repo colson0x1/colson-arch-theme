@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """colson-arch-theme — Omarchy-grade theming for GNOME on Arch (and any GNOME distro).
 
-One command themes the whole desktop: wallpaper, GNOME Shell (generated), GTK apps
-(shipped or generated libadwaita colors), accent + light/dark, Ghostty, Neovim, btop,
-icons. 133+ Omarchy theme bundles (official + community), a live-preview picker,
+One command themes the whole desktop, live: wallpaper, GNOME Shell (generated), GTK apps
+(shipped or generated libadwaita colors, adw-gtk3 by mode), accent + light/dark, icons with
+accent-colored folders, cursor, Ghostty / Alacritty / Kitty / foot, tmux (opt-in), Neovim,
+btop, the browser frame, the editor theme — and every open terminal and Neovim recolors
+instantly. 133 Omarchy theme bundles (official + community), a live-preview picker,
 wallpaper rotation, day/night scheduling, and a true-black monochrome base (Graphite).
 
 Design laws:
@@ -58,6 +60,17 @@ SHELL_THEMES = HOME / ".themes"
 EXT_DIR = XDG_DATA / "gnome-shell" / "extensions"
 USER_THEME_UUID = "user-theme@gnome-shell-extensions.gcampax.github.com"
 SYSTEMD_USER = XDG_CONFIG / "systemd" / "user"
+ALACRITTY_CONFIG = XDG_CONFIG / "alacritty" / "alacritty.toml"
+ALACRITTY_ACTIVE = XDG_CONFIG / "alacritty" / f"{APP}.toml"
+KITTY_CONFIG = XDG_CONFIG / "kitty" / "kitty.conf"
+KITTY_ACTIVE = XDG_CONFIG / "kitty" / f"{APP}.conf"
+FOOT_CONFIG = XDG_CONFIG / "foot" / "foot.ini"
+FOOT_ACTIVE = XDG_CONFIG / "foot" / f"{APP}.ini"
+TMUX_CONFIGS = (XDG_CONFIG / "tmux" / "tmux.conf", HOME / ".tmux.conf")
+TMUX_ACTIVE = XDG_CONFIG / "tmux" / f"{APP}.conf"
+ICON_DIRS = (pathlib.Path("/usr/share/icons"), XDG_DATA / "icons", HOME / ".icons")
+THEME_DIRS = (pathlib.Path("/usr/share/themes"), XDG_DATA / "themes", HOME / ".themes")
+RUNTIME = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 SCRIPT = pathlib.Path(os.path.realpath(__file__))
 MANAGED = "managed by `theme`"
 
@@ -161,6 +174,13 @@ def userctl(*args):
         print("  [dry-run] systemctl --user " + " ".join(args))
         return True
     return subprocess.run(["systemctl", "--user", *args], capture_output=True).returncode == 0
+
+
+def greset(schema, key):
+    if DRY:
+        print(f"  [dry-run] gsettings reset {schema} {key}")
+        return True
+    return subprocess.run(["gsettings", "reset", schema, key], capture_output=True).returncode == 0
 
 
 def gget(schema, key):
@@ -334,7 +354,7 @@ def palette_of(lines):
         if m:
             pal[int(m.group(1))] = "#" + m.group(2).lstrip("#")
             continue
-        m = re.match(r"(background|foreground|cursor-color|selection-background)\s*=\s*(#?[0-9a-fA-F]{6})", l)
+        m = re.match(r"(background|foreground|cursor-color|cursor-text|selection-background|selection-foreground)\s*=\s*(#?[0-9a-fA-F]{6})", l)
         if m:
             meta[m.group(1)] = "#" + m.group(2).lstrip("#")
     return pal, meta
@@ -423,6 +443,623 @@ def nvim_hook_write(name, scheme, lines, mode):
     NVIM_HOOK.write_text(lua)
 
 
+# ─────────────────────────────── targets ─────────────────────────────────────
+TARGETS = [  # name, default, what `theme <name>` touches
+    ("wallpaper", True, "GNOME wallpaper, its dark variant and the lock screen"),
+    ("shell", True, "generated GNOME Shell theme, selected through User Themes"),
+    ("gtk", True, "GTK4/GTK3 apps: shipped gtk.css or generated libadwaita colors; adw-gtk3 by mode"),
+    ("accent", True, "GNOME accent color, light/dark color-scheme, fallback desktop color"),
+    ("icons", True, "icon theme: the declared Yaru variant, else Papirus with accent-colored folders"),
+    ("cursor", True, "Bibata cursor: Ice on dark themes, Classic on light"),
+    ("ghostty", True, "Ghostty palette include"),
+    ("alacritty", True, "Alacritty colors import"),
+    ("kitty", True, "Kitty colors include"),
+    ("foot", True, "foot colors include"),
+    ("tmux", False, "tmux status line, borders, messages, copy mode (opt-in: your own status design wins by default)"),
+    ("nvim", True, "Neovim: declared colorscheme at VimEnter, canvas aligned to the terminal"),
+    ("btop", True, "btop theme"),
+    ("browser", True, "Chromium / Chrome / Brave frame color, applied to a running browser"),
+    ("vscode", True, "VS Code / Cursor / VSCodium colorTheme, only when that theme's extension is already installed"),
+    ("live", True, "instant recolor of every open terminal (OSC), Neovim (RPC) and tmux; nothing to reload"),
+]
+TARGET_DEFAULT = {n: d for n, d, _ in TARGETS}
+TARGETS_FILE = STATE / "targets"
+
+
+def targets_state():
+    st = dict(TARGET_DEFAULT)
+    if TARGETS_FILE.exists():
+        for line in TARGETS_FILE.read_text().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                if k.strip() in st:
+                    st[k.strip()] = v.strip().lower() in ("on", "true", "1", "yes")
+    return st
+
+
+def cmd_target(args):
+    st = targets_state()
+    if not args or args[0] in ("list", "show"):
+        print()
+        print(f" {B('targets')}   {D('what `theme <name>` is allowed to touch  ·  theme target on|off <name>')}")
+        print(f" {rule()}")
+        for n, d, what in TARGETS:
+            flag = "on " if st[n] else "off"
+            note = "" if st[n] == d else D("  (default " + ("on" if d else "off") + ")")
+            print(f"   {n:<10} {flag}  {D(what)}{note}")
+        print()
+        credit()
+        return
+    if len(args) == 2 and args[0] in ("on", "off") and args[1] in st:
+        st[args[1]] = args[0] == "on"
+        STATE.mkdir(parents=True, exist_ok=True)
+        TARGETS_FILE.write_text("".join(f"{k}={'on' if v else 'off'}\n" for k, v in st.items() if v != TARGET_DEFAULT[k]))
+        hint = "  (theme install wires its hook; theme <name> applies it)" if args[0] == "on" and args[1] in ("tmux", "alacritty", "kitty", "foot") else ""
+        print(f"target {args[1]}: {args[0]}{hint}")
+        return
+    sys.exit("usage: theme target [on|off <name>]      (theme targets)")
+
+
+# ─────────────────────────────── palette ─────────────────────────────────────
+def full_palette(lines):
+    """Every slot filled: theme values first, Graphite for anything a bundle left out."""
+    pal, meta = palette_of(lines)
+    gp, gm = palette_of(GRAPHITE_LINES)
+    p = [pal.get(i) or gp[i] for i in range(16)]
+    return dict(bg=meta.get("background") or gm["background"], fg=meta.get("foreground") or gm["foreground"],
+                cursor=meta.get("cursor-color") or meta.get("foreground") or gm["cursor-color"],
+                sel_bg=meta.get("selection-background") or p[8], sel_fg=meta.get("selection-foreground"), p=p)
+
+
+def tilde(path):
+    try:
+        return "~/" + str(pathlib.Path(path).relative_to(HOME))
+    except ValueError:
+        return str(path)
+
+
+# ─────────────────────────────── terminals: fragments ────────────────────────
+def alacritty_fragment(name, lines):
+    if not lines:
+        return f"# {APP}: graphite — your own Alacritty colors rule ({MANAGED})\n"
+    c = full_palette(lines)
+    names = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]
+    out = [f"# {APP}: theme {name} — {MANAGED}", "[colors.primary]", f'background = "{c["bg"]}"', f'foreground = "{c["fg"]}"',
+           "[colors.cursor]", f'cursor = "{c["cursor"]}"', 'text = "CellBackground"',
+           "[colors.selection]", f'background = "{c["sel_bg"]}"', f'text = "{c["sel_fg"] or "CellForeground"}"']
+    for base, grp in ((0, "normal"), (8, "bright")):
+        out.append(f"[colors.{grp}]")
+        out += [f'{n} = "{c["p"][base + i]}"' for i, n in enumerate(names)]
+    return "\n".join(out) + "\n"
+
+
+def kitty_fragment(name, lines):
+    if not lines:
+        return f"# {APP}: graphite — your own kitty colors rule ({MANAGED})\n"
+    c = full_palette(lines)
+    out = [f"# {APP}: theme {name} — {MANAGED}", f"background {c['bg']}", f"foreground {c['fg']}", f"cursor {c['cursor']}",
+           f"selection_background {c['sel_bg']}"] + ([f"selection_foreground {c['sel_fg']}"] if c["sel_fg"] else [])
+    out += [f"color{i} {c['p'][i]}" for i in range(16)]
+    return "\n".join(out) + "\n"
+
+
+def foot_fragment(name, lines):
+    if not lines:
+        return f"# {APP}: graphite — your own foot colors rule ({MANAGED})\n"
+    c = full_palette(lines)
+    h = lambda x: x.lstrip("#")
+    out = [f"# {APP}: theme {name} — {MANAGED}", "[colors]", f"background={h(c['bg'])}", f"foreground={h(c['fg'])}",
+           f"selection-background={h(c['sel_bg'])}"] + ([f"selection-foreground={h(c['sel_fg'])}"] if c["sel_fg"] else [])
+    out += [f"regular{i}={h(c['p'][i])}" for i in range(8)] + [f"bright{i}={h(c['p'][8 + i])}" for i in range(8)]
+    out += ["[cursor]", f"color={h(c['bg'])} {h(c['cursor'])}"]
+    return "\n".join(out) + "\n"
+
+
+def tmux_fragment(name, lines, decl_acc, mode):
+    c = scheme_from(lines or GRAPHITE_LINES, decl_acc, mode)
+    p = full_palette(lines or GRAPHITE_LINES)
+    dim = _mix(c["fg"], c["bg"], 0.35)
+    return "\n".join([
+        f"# {APP}: theme {name} — {MANAGED}",
+        f'set -g status-style "bg={c["bg"]},fg={c["fg"]}"',
+        f'set -g window-status-style "fg={dim},bg=default"',
+        f'set -g window-status-current-style "fg={c["acc_fg"]},bg={c["acc"]},bold"',
+        f'set -g window-status-activity-style "fg={c["acc"]},bold"',
+        f'set -g pane-border-style "fg={_mix(c["bg"], c["fg"], 0.18)}"',
+        f'set -g pane-active-border-style "fg={c["acc"]}"',
+        f'set -g message-style "bg={c["surface2"]},fg={c["fg"]}"',
+        f'set -g message-command-style "bg={c["surface2"]},fg={c["fg"]}"',
+        f'set -g mode-style "bg={p["sel_bg"]},fg={p["sel_fg"] or c["fg"]}"',
+        f'set -g clock-mode-colour "{c["acc"]}"',
+        f'set -g display-panes-active-colour "{c["acc"]}"',
+        f'set -g display-panes-colour "{dim}"',
+    ]) + "\n"
+
+
+# ─────────────────────────────── terminals: hooks ────────────────────────────
+def _wire(path, line, comment, top=False):
+    """Add one hook line, once. → wired | already | missing"""
+    if not path.exists():
+        return "missing"
+    s = path.read_text()
+    if line in s:
+        return "already"
+    block = f"# {APP}: {comment}\n{line}\n"
+    path.write_text((block + "\n" + s) if top else (s.rstrip() + "\n\n" + block))
+    return "wired"
+
+
+def _unwire(path, line):
+    if not path.exists():
+        return
+    s = path.read_text()
+    if line not in s and f"# {APP}:" not in s:
+        return
+    keep = [l for l in s.splitlines() if l.strip() != line.strip() and not l.startswith(f"# {APP}:")]
+    path.write_text("\n".join(keep).rstrip() + "\n")
+
+
+ALACRITTY_IMPORT = f'"{tilde(ALACRITTY_ACTIVE)}"'
+KITTY_INCLUDE = f"include {APP}.conf"
+FOOT_INCLUDE = f"include={FOOT_ACTIVE}"
+TMUX_SOURCE = f"source-file -q {TMUX_ACTIVE}"
+
+
+def hook_alacritty():
+    if not ALACRITTY_CONFIG.exists():
+        return "alacritty: no alacritty.toml — skipped"
+    s = ALACRITTY_CONFIG.read_text()
+    if ALACRITTY_IMPORT in s:
+        status = "import already wired"
+    else:
+        empty = re.search(r"^(\s*import\s*=\s*\[)\s*\]", s, re.M)
+        m = re.search(r"^\s*import\s*=\s*\[", s, re.M)
+        if empty:
+            s = s[:empty.start()] + empty.group(1) + ALACRITTY_IMPORT + "]" + s[empty.end():]
+        elif m:
+            s = s[:m.end()] + ALACRITTY_IMPORT + ", " + s[m.end():]
+        elif re.search(r"^\[general\]\s*$", s, re.M):
+            s = re.sub(r"^\[general\]\s*$", f"[general]\nimport = [{ALACRITTY_IMPORT}]", s, count=1, flags=re.M)
+        else:
+            s = s.rstrip() + f"\n\n# {APP}: active theme colors (empty file = your own colors)\n[general]\nimport = [{ALACRITTY_IMPORT}]\n"
+        ALACRITTY_CONFIG.write_text(s)
+        status = "import wired"
+    if not ALACRITTY_ACTIVE.exists():
+        ALACRITTY_ACTIVE.write_text(alacritty_fragment("graphite", []))
+    return "alacritty: " + status
+
+
+def unhook_alacritty():
+    if not ALACRITTY_CONFIG.exists():
+        return
+    s = ALACRITTY_CONFIG.read_text()
+    s = s.replace(f"\n\n# {APP}: active theme colors (empty file = your own colors)\n[general]\nimport = [{ALACRITTY_IMPORT}]\n", "\n")
+    s = s.replace(ALACRITTY_IMPORT + ", ", "").replace(", " + ALACRITTY_IMPORT, "").replace(ALACRITTY_IMPORT, "")
+    s = re.sub(r"^\s*import\s*=\s*\[\s*,?\s*\]\s*\n", "", s, flags=re.M)   # an array we emptied is not worth keeping
+    ALACRITTY_CONFIG.write_text(s.rstrip() + "\n")
+    ALACRITTY_ACTIVE.unlink(missing_ok=True)
+
+
+def hook_kitty():
+    r = _wire(KITTY_CONFIG, KITTY_INCLUDE, "active theme colors (empty file = your own colors)")
+    if r == "missing":
+        return "kitty: no kitty.conf — skipped"
+    if not KITTY_ACTIVE.exists():
+        KITTY_ACTIVE.write_text(kitty_fragment("graphite", []))
+    return f"kitty: include " + ("already wired" if r == "already" else r)
+
+
+def hook_foot():
+    r = _wire(FOOT_CONFIG, FOOT_INCLUDE, "active theme colors (empty file = your own colors)", top=True)
+    if r == "missing":
+        return "foot: no foot.ini — skipped"
+    if not FOOT_ACTIVE.exists():
+        FOOT_ACTIVE.write_text(foot_fragment("graphite", []))
+    return f"foot: include " + ("already wired" if r == "already" else r)
+
+
+def tmux_config():
+    return next((p for p in TMUX_CONFIGS if p.exists()), None)
+
+
+def hook_tmux():
+    if not targets_state()["tmux"]:
+        return "tmux: opt-in — `theme target on tmux` to theme the status line"
+    conf = tmux_config()
+    if not conf:
+        return "tmux: no tmux.conf — skipped"
+    r = _wire(conf, TMUX_SOURCE, "active theme for the status line, borders and messages")
+    if not TMUX_ACTIVE.exists():
+        TMUX_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+        TMUX_ACTIVE.write_text(tmux_fragment("graphite", [], "#ffffff", "dark"))
+    return "tmux: source-file " + ("already wired" if r == "already" else r)
+
+
+# ─────────────────────────────── live: terminals, neovim, tmux ───────────────
+TERMINALS = ("ghostty", "kitty", "alacritty", "foot", "footclient", "wezterm-gui", "gnome-terminal-server",
+             "ptyxis-agent", "konsole", "xfce4-terminal", "tilix", "blackbox", "rio", "contour", "warp-terminal")
+ST = "\x1b\\"
+
+
+def osc_payload(lines):
+    """OSC 10/11/12/17 + OSC 4 for the 16 slots; with no lines, the reset forms (104/110/111/112/117) so
+    every terminal returns to its own configured colors — under Graphite that is the base config."""
+    if not lines:
+        return "".join(f"\x1b]{n}{ST}" for n in (104, 110, 111, 112, 117)).encode()
+    c = full_palette(lines)
+    seq = [f"\x1b]10;{c['fg']}{ST}", f"\x1b]11;{c['bg']}{ST}", f"\x1b]12;{c['cursor']}{ST}", f"\x1b]17;{c['sel_bg']}{ST}"]
+    seq += [f"\x1b]4;{i};{c['p'][i]}{ST}" for i in range(16)]
+    return "".join(seq).encode()
+
+
+def terminal_ptys():
+    """Controlling ttys of the shells that running terminal emulators spawned — this user only."""
+    try:
+        ps = subprocess.run(["ps", "-o", "pid=,ppid=,tty=,comm=", "-u", str(os.getuid())],
+                            capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    rows = [r.split(None, 3) for r in ps.splitlines()]
+    rows = [r for r in rows if len(r) == 4]
+    short = {t[:15] for t in TERMINALS}
+    term = {pid for pid, ppid, tty, comm in rows if comm[:15] in short}
+    return sorted({f"/dev/{tty}" for pid, ppid, tty, comm in rows if ppid in term and tty.startswith("pts/")})
+
+
+def terminals_live(lines):
+    payload, n = osc_payload(lines), 0
+    for pty in terminal_ptys():
+        if DRY:
+            print(f"  [dry-run] recolor {pty} (OSC {'reset' if not lines else '4/10/11/12'})")
+            n += 1
+            continue
+        try:
+            fd = os.open(pty, os.O_WRONLY | os.O_NOCTTY | os.O_NONBLOCK)
+            try:
+                os.write(fd, payload)
+            finally:
+                os.close(fd)
+            n += 1
+        except OSError:
+            pass
+    return n
+
+
+def nvim_sockets():
+    socks = list(RUNTIME.glob("nvim.*.0")) if RUNTIME.exists() else []
+    legacy = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"nvim.{os.environ.get('USER', '')}"
+    if legacy.exists():
+        socks += list(legacy.glob("*/nvim.*.0"))
+    return [s for s in socks if s.is_socket()]
+
+
+def nvim_live():
+    """Re-run the hook inside every running Neovim over its RPC socket — no keys are sent, no mode changes."""
+    n = 0
+    if not shutil.which("nvim"):
+        return 0
+    for sock in nvim_sockets():
+        if DRY:
+            print(f"  [dry-run] nvim --server {sock} --remote-expr luafile {NVIM_HOOK}")
+            n += 1
+            continue
+        try:
+            r = subprocess.run(["nvim", "--server", str(sock), "--remote-expr", f"execute('luafile {NVIM_HOOK}')"],
+                               capture_output=True, text=True, timeout=3)
+            n += r.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return n
+
+
+def tmux_live():
+    if not shutil.which("tmux") or not TMUX_ACTIVE.exists():
+        return False
+    if DRY:
+        print(f"  [dry-run] tmux source-file {TMUX_ACTIVE}")
+        return True
+    if subprocess.run(["tmux", "list-sessions"], capture_output=True).returncode != 0:
+        return False
+    return subprocess.run(["tmux", "source-file", "-q", str(TMUX_ACTIVE)], capture_output=True).returncode == 0
+
+
+# ─────────────────────────────── browser frame ───────────────────────────────
+BROWSERS = (("chromium", "chromium"), ("google-chrome-stable", "chrome"), ("google-chrome", "chrome"),
+            ("brave", "brave"), ("brave-browser", "brave"), ("vivaldi-stable", "vivaldi-bin"), ("microsoft-edge-stable", "msedge"))
+
+
+def browser_rgb(dirp, lines):
+    """R,G,B for --set-theme-color: the bundle's chromium.theme when it holds one, else the background."""
+    f = dirp / "chromium.theme" if dirp else None
+    if f and f.exists():
+        m = re.fullmatch(r"\s*(\d{1,3}),(\d{1,3}),(\d{1,3})\s*", f.read_text(errors="ignore"))
+        if m and all(int(x) <= 255 for x in m.groups()):
+            return ",".join(m.groups())
+    return ",".join(str(x) for x in _rgb(full_palette(lines or GRAPHITE_LINES)["bg"]))
+
+
+def browsers_found():
+    seen, out = set(), []
+    for binary, proc in BROWSERS:
+        exe = shutil.which(binary)
+        if exe and proc not in seen:
+            seen.add(proc)
+            running = subprocess.run(["pgrep", "-x", proc], capture_output=True).returncode == 0
+            out.append((binary, exe, running))
+    return out
+
+
+def browsers_apply(rgb):
+    """The frame color is handed to the browser's own IPC (--set-theme-color) — only to a running browser,
+    so nothing is launched behind your back. It persists in the profile once set."""
+    done = []
+    for binary, exe, running in browsers_found():
+        if not running:
+            continue
+        if DRY:
+            print(f"  [dry-run] {binary} --no-startup-window --set-theme-color={rgb}")
+            done.append(binary)
+            continue
+        try:
+            subprocess.Popen([exe, "--no-startup-window", f"--set-theme-color={rgb}"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            done.append(binary)
+        except OSError:
+            pass
+    return done
+
+
+# ─────────────────────────────── editors: vs code family ─────────────────────
+EDITORS = (("Code", ".vscode"), ("Cursor", ".cursor"), ("VSCodium", ".vscode-oss"), ("Code - OSS", ".vscode-oss"))
+VSCODE_PREV = STATE / "vscode.prev"
+
+
+def vscode_decl(dirp):
+    f = dirp / "vscode.json"
+    if not f.exists():
+        return None, None
+    try:
+        d = json.loads(f.read_text(errors="ignore"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, None
+    name, ext = str(d.get("name", "")).strip(), str(d.get("extension", "")).strip().lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*", ext) or not re.fullmatch(r"[\w .+()'’-]{1,80}", name):
+        return None, None
+    return name, ext
+
+
+def _settings_get_theme(path):
+    m = re.search(r'"workbench\.colorTheme"\s*:\s*"([^"]*)"', path.read_text(errors="ignore"))
+    return m.group(1) if m else ""
+
+
+def _settings_set_theme(path, name):
+    """Touch only the colorTheme key; comments and trailing commas elsewhere are left exactly as they were."""
+    s = path.read_text()
+    esc = name.replace("\\", "\\\\").replace('"', '\\"')
+    if re.search(r'"workbench\.colorTheme"\s*:\s*"[^"]*"', s):
+        s2 = re.sub(r'("workbench\.colorTheme"\s*:\s*)"[^"]*"', lambda m: m.group(1) + f'"{esc}"', s, count=1)
+    else:
+        body = s.rstrip()
+        if not body.endswith("}"):
+            return False
+        inner = body[:-1].rstrip()
+        sep = "" if inner.endswith(("{", ",")) else ","
+        s2 = inner + f'{sep}\n  "workbench.colorTheme": "{esc}"\n}}\n'
+    if s2 != s:
+        path.write_text(s2)
+    return True
+
+
+def editors_found():
+    out = []
+    for app_dir, ext_home in EDITORS:
+        settings = XDG_CONFIG / app_dir / "User" / "settings.json"
+        if settings.exists():
+            out.append((app_dir, settings, HOME / ext_home / "extensions"))
+    return out
+
+
+def editors_apply(name, ext):
+    """Set the editor's colorTheme only where that theme's extension is already installed. Never installs anything;
+    remembers what was there so Graphite and uninstall can put it back."""
+    prev = json.loads(VSCODE_PREV.read_text()) if VSCODE_PREV.exists() else {}
+    done = []
+    for app_dir, settings, ext_dir in editors_found():
+        if not ext_dir.exists() or not any(p.name.lower().startswith(ext + "-") for p in ext_dir.iterdir()):
+            continue
+        if DRY:
+            print(f"  [dry-run] {app_dir}: workbench.colorTheme = {name}")
+            done.append(app_dir)
+            continue
+        prev.setdefault(app_dir, _settings_get_theme(settings))
+        if _settings_set_theme(settings, name):
+            done.append(app_dir)
+    if done and not DRY:
+        STATE.mkdir(parents=True, exist_ok=True)
+        VSCODE_PREV.write_text(json.dumps(prev))
+    return done
+
+
+def editors_restore():
+    if not VSCODE_PREV.exists():
+        return []
+    prev, done = json.loads(VSCODE_PREV.read_text()), []
+    for app_dir, old in prev.items():
+        settings = XDG_CONFIG / app_dir / "User" / "settings.json"
+        if settings.exists() and old:
+            if DRY:
+                print(f"  [dry-run] {app_dir}: workbench.colorTheme = {old} (restored)")
+            else:
+                _settings_set_theme(settings, old)
+            done.append(app_dir)
+    if not DRY:
+        VSCODE_PREV.unlink(missing_ok=True)
+    return done
+
+
+# ─────────────────────────────── icons, cursor, gtk3 ─────────────────────────
+YARU_VARIANTS = {"Yaru-blue": "#0073e5", "Yaru-red": "#e6323c", "Yaru-magenta": "#c33d76", "Yaru-purple": "#7764d8",
+                 "Yaru-olive": "#4b8501", "Yaru-sage": "#657b69", "Yaru-prussiangreen": "#308280", "Yaru-viridian": "#03875b",
+                 "Yaru-wartybrown": "#75542a", "Yaru-yellow": "#f5c211", "Yaru": "#e95420", "Yaru-bark": "#787859",
+                 "Yaru-grey": "#8c8c8c"}
+PAPIRUS_FOLDERS = {"red": "#f44336", "carmine": "#b71c1c", "deeporange": "#ff5722", "orange": "#ff9800", "paleorange": "#ffcc80",
+                   "yaru": "#e95420", "brown": "#ae8e6c", "palebrown": "#d7ccc8", "yellow": "#ffc107", "green": "#87b158",
+                   "teal": "#009688", "darkcyan": "#00838f", "cyan": "#00bcd4", "breeze": "#3daee9", "nordic": "#81a1c1",
+                   "blue": "#5294e2", "adwaita": "#3584e4", "indigo": "#5c6bc0", "violet": "#7e57c2", "magenta": "#d53a9d",
+                   "pink": "#f06292", "bluegrey": "#607d8b", "grey": "#8e8e8e", "black": "#4f4f4f", "white": "#e4e4e4"}
+
+
+def nearest_name(hexcol, table):
+    """Nearest named color. Colorfulness is judged by RGB chroma (max-min), not HLS saturation, which
+    inflates for near-black values; hue then dominates for colorful inputs, lightness for greys."""
+    def parts(hx):
+        r, g, b = (x / 255 for x in _rgb(hx))
+        h, l, _ = colorsys.rgb_to_hls(r, g, b)
+        return h, l, max(r, g, b) - min(r, g, b)
+    h, l, ch = parts(hexcol)
+    colorful = ch > 0.18
+
+    def dist(other):
+        h2, l2, ch2 = parts(other)
+        if colorful != (ch2 > 0.18):
+            return 9.0                     # colorful accents stay among colorful variants, greys among greys
+        if colorful:
+            dh = min(abs(h - h2), 1 - abs(h - h2)) * 3.0
+            return dh * dh + (l - l2) ** 2 * 0.15          # hue decides; lightness only breaks ties
+        return (l - l2) ** 2 * 0.6 + (ch - ch2) ** 2 * 0.4  # greys: lightness decides
+    return min(table, key=lambda n: dist(table[n]))
+
+
+def installed_icon_themes():
+    names = set()
+    for base in ICON_DIRS:
+        if base.exists():
+            names |= {d.name for d in base.iterdir() if (d / "index.theme").exists()}
+    return names
+
+
+def installed_gtk_themes():
+    names = set()
+    for base in THEME_DIRS:
+        if base.exists():
+            names |= {d.name for d in base.iterdir() if d.is_dir()}
+    return names
+
+
+def papirus_overlay(c):
+    """A user-level icon theme that inherits Papirus (Dark or Light by mode) and swaps every folder icon for the
+    variant nearest the accent — Papirus ships all the colors; only symlinks and an index are created."""
+    import configparser
+    root = next((b for b in ICON_DIRS if (b / "Papirus" / "index.theme").exists()), None)
+    if not root:
+        return None
+    color = nearest_name(c["acc"], PAPIRUS_FOLDERS)
+    papirus = root / "Papirus"
+    name = f"{APP}-papirus-{color}" + ("" if c["light"] else "-dark")
+    dest = XDG_DATA / "icons" / name
+    cp = configparser.ConfigParser(interpolation=None, strict=False)
+    cp.optionxform = str
+    try:
+        cp.read(papirus / "index.theme", encoding="utf-8")
+    except configparser.Error:
+        return None
+    dirs = [d.strip() for d in cp.get("Icon Theme", "Directories", fallback="").split(",") if d.strip()]
+    if dest.exists():
+        shutil.rmtree(dest, ignore_errors=True)
+    sections, made = [], 0
+    for d in dirs:
+        if not cp.has_section(d) or cp.get(d, "Context", fallback="") != "Places":
+            continue
+        srcdir = papirus / d
+        if not srcdir.is_dir():
+            continue
+        colored = sorted(srcdir.glob(f"folder-{color}*.svg"))
+        if not colored:
+            continue
+        (dest / d).mkdir(parents=True, exist_ok=True)
+        for f in colored:
+            (dest / d / f.name.replace(f"folder-{color}", "folder", 1)).symlink_to(f.resolve())
+            made += 1
+        sections.append(d)
+    if not made:
+        shutil.rmtree(dest, ignore_errors=True)
+        return None
+    inherits = "Papirus,breeze,hicolor" if c["light"] else "Papirus-Dark,Papirus,breeze-dark,hicolor"
+    idx = ["[Icon Theme]", f"Name={name}", f"Comment=Papirus with {color} folders, generated by {APP}",
+           f"Inherits={inherits}", f"Directories={','.join(sections)}", ""]
+    for d in sections:
+        idx.append(f"[{d}]")
+        idx += [f"{k}={cp.get(d, k)}" for k in ("Size", "Context", "Type", "MinSize", "MaxSize", "Scale") if cp.has_option(d, k)]
+        idx.append("")
+    (dest / "index.theme").write_text("\n".join(idx))
+    if shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-f", "-t", "-q", str(dest)], capture_output=True)
+    for old in (XDG_DATA / "icons").glob(f"{APP}-papirus-*"):
+        if old != dest:
+            shutil.rmtree(old, ignore_errors=True)
+    return name
+
+
+def icons_clear():
+    for old in (XDG_DATA / "icons").glob(f"{APP}-papirus-*"):
+        shutil.rmtree(old, ignore_errors=True)
+
+
+def icons_apply(dirp, lines, decl_acc, mode):
+    """Declared Yaru variant (else the one nearest the accent), -dark on dark themes; else Papirus with
+    accent-colored folders; else leave the icon theme alone."""
+    have = installed_icon_themes()
+    c = scheme_from(lines, decl_acc, mode)
+    want = ""
+    f = dirp / "icons.theme" if dirp else None
+    if f and f.exists():
+        first = (f.read_text(errors="ignore").strip().splitlines() or [""])[0].strip()
+        want = first if re.fullmatch(r"[A-Za-z0-9._-]{1,40}", first) else ""
+    base = re.sub(r"-(dark|light)$", "", want)
+    if any(n.startswith("Yaru") for n in have):
+        pool = {k: v for k, v in YARU_VARIANTS.items() if k in have} or YARU_VARIANTS
+        yaru = base if base in have else nearest_name(c["acc"], pool)
+        for cand in ([f"{yaru}-dark"] if not c["light"] else []) + [yaru] + (["Yaru-dark"] if not c["light"] else ["Yaru"]):
+            if cand in have:
+                gset("org.gnome.desktop.interface", "icon-theme", cand)
+                return cand
+    if "Papirus" in have:
+        name = papirus_overlay(c)
+        if not name:
+            name = "Papirus" if c["light"] else ("Papirus-Dark" if "Papirus-Dark" in have else "Papirus")
+        gset("org.gnome.desktop.interface", "icon-theme", name)
+        return name
+    return None
+
+
+def cursor_apply(light):
+    have = installed_icon_themes()
+    for cand in (("Bibata-Modern-Classic", "Bibata-Modern-Ice") if light else ("Bibata-Modern-Ice", "Bibata-Modern-Classic")):
+        if cand in have:
+            gset("org.gnome.desktop.interface", "cursor-theme", cand)
+            return cand
+    return None
+
+
+def gtk3_theme_apply(light):
+    want = "adw-gtk3" if light else "adw-gtk3-dark"
+    if want in installed_gtk_themes():
+        gset("org.gnome.desktop.interface", "gtk-theme", want)
+        return want
+    return None
+
+
+def extension_states():
+    """uuid → ACTIVE | INACTIVE | OUT OF DATE | ERROR | not loaded (GNOME only learns new dirs at login)"""
+    out = {}
+    for uuid, _ in EXTENSIONS:
+        r = subprocess.run(["gnome-extensions", "info", uuid], capture_output=True, text=True)
+        m = re.search(r"^\s*State:\s*(.+)$", r.stdout, re.M)
+        out[uuid] = m.group(1).strip() if (r.returncode == 0 and m) else ("not loaded" if (EXT_DIR / uuid).exists() else "missing")
+    return out
+
+
 # ─────────────────────────────── generation: shell + gtk ─────────────────────
 def _mix(a, b, t):
     ra, ga, ba = _rgb(a)
@@ -454,30 +1091,89 @@ def scheme_from(lines, decl_acc, mode):
                 yellow=pal.get(3) or "#ffd75f", acc_fg=("#000000" if _lum(acc) > 0.6 else "#ffffff"))
 
 
-def shell_apply(name, lines, decl_acc, mode):
-    """Generate a GNOME Shell theme (imports the stock stylesheet, overrides colors) and select it."""
-    c = scheme_from(lines, decl_acc, mode)
-    css = f"""@import url("resource:///org/gnome/shell/theme/gnome-shell.css");
-/* theme: {name} — GNOME Shell theme generated by {APP} ({CREDIT}) */
-#panel {{ background-color: {_rgba(c['bg'], 0.78)}; color: {c['fg']}; }}
-#panel .panel-button {{ color: {c['fg']}; }}
-#panel .panel-button:hover, #panel .panel-button:active, #panel .panel-button:checked, #panel .panel-button:focus {{ background-color: {_rgba(c['acc'], 0.22)}; color: {c['fg']}; }}
-.popup-menu-content, .quick-settings, .calendar, .datemenu-displays-section, .datemenu-today-button, .notification-banner, .message, .message-list, .osd-window, .modal-dialog, .search-section-content, .switcher-list, .candidate-popup-content, .weather, .world-clocks-button, .events-button {{ background-color: {c['surface']}; color: {c['fg']}; border: 1px solid {c['border']}; border-radius: 16px; }}
-.popup-menu-item:hover, .popup-menu-item:focus, .popup-menu-item:active, .popup-menu-item:checked {{ background-color: {_rgba(c['acc'], 0.24)}; color: {c['fg']}; }}
-.quick-toggle, .quick-menu-toggle {{ background-color: {c['surface2']}; color: {c['fg']}; }}
-.quick-toggle:checked, .quick-menu-toggle:checked {{ background-color: {c['acc']}; color: {c['acc_fg']}; }}
-.dash-background, #dash {{ background-color: {_rgba(c['bg'], 0.60)}; border: 1px solid {c['border']}; border-radius: 22px; }}
-.search-entry {{ background-color: {c['surface']}; color: {c['fg']}; border-color: {c['border']}; }}
-.search-entry:focus {{ border-color: {c['acc']}; }}
-.window-caption, .workspace-thumbnail-indicator {{ background-color: {c['surface']}; color: {c['fg']}; }}
-.workspace-background {{ border-radius: 14px; }}
-.unlock-dialog, .login-dialog {{ background-color: {_rgba(c['bg'], 0.55)}; color: {c['fg']}; }}
-.notification-banner:hover {{ background-color: {c['surface2']}; }}
-.app-well-app:hover .overview-icon, .app-well-app:focus .overview-icon, .app-well-app:selected .overview-icon {{ background-color: {_rgba(c['acc'], 0.20)}; }}
+SHELL_CSS = """@import url("resource:///org/gnome/shell/theme/gnome-shell.css");
+/* theme: @NAME@ — GNOME Shell theme generated by @APP@ (@CREDIT@). The stock stylesheet stays authoritative
+   for layout; only color, translucency and depth are overridden, so a rejected rule can never break the shell. */
+
+/* top bar */
+#panel { background-color: @PANEL@; color: @FG@; box-shadow: none; }
+#panel .panel-button { color: @FG@; }
+#panel .panel-button:hover, #panel .panel-button:active, #panel .panel-button:checked, #panel .panel-button:focus { background-color: @ACC22@; color: @FG@; box-shadow: none; }
+
+/* glass surfaces: menus, quick settings, calendar, notifications, osd, dialogs, search, switchers */
+.popup-menu-content, .quick-settings, .quick-toggle-menu, .calendar, .datemenu-displays-section, .datemenu-today-button, .notification-banner, .message, .message-list, .osd-window, .modal-dialog, .search-section-content, .switcher-list, .candidate-popup-content, .weather, .world-clocks-button, .events-button, .app-folder-dialog, .workspace-switcher { background-color: @POPUP@; color: @FG@; border: 1px solid @BORDER@; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.40); }
+.popup-menu-item:hover, .popup-menu-item:focus, .popup-menu-item:active, .popup-menu-item:checked { background-color: @ACC24@; color: @FG@; }
+.popup-separator-menu-item .popup-separator-menu-item-separator { background-color: @BORDER@; }
+
+/* quick settings */
+.quick-toggle, .quick-menu-toggle, .quick-slider, .quick-settings .icon-button, .quick-settings-system-item .icon-button { background-color: @SURFACE2@; color: @FG@; }
+.quick-toggle:hover, .quick-menu-toggle:hover, .quick-settings .icon-button:hover { background-color: @FG10@; }
+.quick-toggle:checked, .quick-menu-toggle:checked, .quick-toggle:checked:hover, .quick-menu-toggle:checked:hover { background-color: @ACC@; color: @ACC_FG@; }
+.quick-slider .slider, .slider { -barlevel-active-background-color: @ACC@; -barlevel-background-color: @FG16@; -slider-handle-border-color: @BORDER@; }
+
+/* calendar and clock menu */
+.calendar .calendar-day-base:hover, .calendar .calendar-day-base:focus { background-color: @ACC18@; }
+.calendar .calendar-today, .calendar .calendar-today:hover, .calendar .calendar-today:focus, .calendar .calendar-today:selected { background-color: @ACC@; color: @ACC_FG@; }
+.calendar .calendar-day-with-events { color: @ACC@; }
+.datemenu-today-button:hover, .datemenu-today-button:focus, .world-clocks-button:hover, .weather-button:hover, .events-button:hover { background-color: @FG08@; }
+
+/* notifications */
+.message:hover, .message:focus { background-color: @FG08@; }
+.notification-banner .button { background-color: @SURFACE2@; color: @FG@; }
+.notification-banner .button:hover { background-color: @ACC24@; }
+
+/* on-screen display */
+.osd-window .level { -barlevel-active-background-color: @ACC@; -barlevel-background-color: @FG16@; }
+
+/* overview: dash, app grid, search, workspaces */
+.dash-background, #dash { background-color: @DASH@; border: 1px solid @BORDER@; border-radius: 22px; }
+.app-well-app-running-dot, .dash .app-well-app-running-dot { background-color: @ACC@; }
+.app-well-app:hover .overview-icon, .app-well-app:focus .overview-icon, .app-well-app:selected .overview-icon, .show-apps:hover .overview-icon, .show-apps:checked .overview-icon, .app-folder:hover .overview-icon { background-color: @ACC20@; }
+.app-well-app:active .overview-icon, .show-apps:active .overview-icon { background-color: @ACC28@; }
+.search-entry { background-color: @POPUP@; color: @FG@; border-color: @BORDER@; }
+.search-entry:focus, .search-entry:hover { border-color: @ACC@; }
+.list-search-result:hover, .list-search-result:focus, .list-search-result:selected, .grid-search-result:focus .overview-icon, .grid-search-result:selected .overview-icon { background-color: @ACC20@; }
+.window-caption { background-color: @POPUP@; color: @FG@; border: 1px solid @BORDER@; }
+.workspace-background { border-radius: 14px; }
+.workspace-thumbnail-indicator { border: 3px solid @ACC@; border-radius: 12px; }
+
+/* window switcher */
+.switcher-list .item-box:selected, .switcher-list .item-box:outlined { background-color: @ACC28@; border-color: @ACC@; color: @FG@; }
+
+/* dialogs and controls */
+.modal-dialog .dialog-button:hover, .modal-dialog .dialog-button:focus { background-color: @FG10@; }
+.modal-dialog .dialog-button.default, .modal-dialog .dialog-button.default:hover { background-color: @ACC@; color: @ACC_FG@; }
+.toggle-switch:checked { background-color: @ACC@; }
+StEntry:focus, .modal-dialog StEntry:focus { border-color: @ACC@; }
+StScrollBar StButton#vhandle, StScrollBar StButton#hhandle { background-color: @FG30@; }
+StScrollBar StButton#vhandle:hover, StScrollBar StButton#hhandle:hover, StScrollBar StButton#vhandle:active, StScrollBar StButton#hhandle:active { background-color: @FG45@; }
+
+/* lock and login */
+.unlock-dialog, .login-dialog { background-color: @SHIELD@; color: @FG@; }
 """
+
+
+def shell_css(name, lines, decl_acc, mode):
+    c = scheme_from(lines, decl_acc, mode)
+    tokens = {"@NAME@": name, "@APP@": APP, "@CREDIT@": CREDIT, "@FG@": c["fg"], "@ACC@": c["acc"], "@ACC_FG@": c["acc_fg"],
+              "@SURFACE2@": c["surface2"], "@BORDER@": c["border"], "@PANEL@": _rgba(c["bg"], 0.72),
+              "@POPUP@": _rgba(c["surface"], 0.92), "@DASH@": _rgba(c["bg"], 0.62), "@SHIELD@": _rgba(c["bg"], 0.55),
+              "@ACC18@": _rgba(c["acc"], 0.18), "@ACC20@": _rgba(c["acc"], 0.20), "@ACC22@": _rgba(c["acc"], 0.22),
+              "@ACC24@": _rgba(c["acc"], 0.24), "@ACC28@": _rgba(c["acc"], 0.28), "@FG08@": _rgba(c["fg"], 0.08),
+              "@FG10@": _rgba(c["fg"], 0.10), "@FG16@": _rgba(c["fg"], 0.16), "@FG30@": _rgba(c["fg"], 0.30),
+              "@FG45@": _rgba(c["fg"], 0.45)}
+    css = SHELL_CSS
+    for k, v in tokens.items():
+        css = css.replace(k, v)
+    return css
+
+
+def shell_apply(name, lines, decl_acc, mode):
+    """Generate a GNOME Shell theme (imports the stock stylesheet, overrides colors) and select it through User Themes.
+    The selection is written even before the extension is loaded, so it takes effect the moment it is."""
     d = SHELL_THEMES / f"theme-{name}" / "gnome-shell"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "gnome-shell.css").write_text(css)
+    (d / "gnome-shell.css").write_text(shell_css(name, lines, decl_acc, mode))
     sd = EXT_DIR / USER_THEME_UUID / "schemas"
     if sd.exists():
         gset("org.gnome.shell.extensions.user-theme", "name", f"theme-{name}", schemadir=sd)
@@ -528,28 +1224,6 @@ def gtk_clear():
             t.unlink()
 
 
-def installed_icon_themes():
-    names = set()
-    for base in (pathlib.Path("/usr/share/icons"), XDG_DATA / "icons", HOME / ".icons"):
-        if base.exists():
-            names |= {d.name for d in base.iterdir() if (d / "index.theme").exists()}
-    return names
-
-
-def icons_apply(dirp):
-    f = dirp / "icons.theme"
-    want = ""
-    if f.exists():
-        txt = f.read_text(errors="ignore").strip()
-        want = txt.splitlines()[0].strip() if txt else ""
-    have = installed_icon_themes()
-    for cand in (want, want.split("-")[0] if want else "", "Papirus-Dark", "Papirus"):
-        if cand and cand in have:
-            gset("org.gnome.desktop.interface", "icon-theme", cand)
-            return cand
-    return None
-
-
 def btop_apply(name, dirp):
     b = dirp / "btop.theme"
     if not b.exists() or not shutil.which("btop"):
@@ -589,49 +1263,117 @@ def write_ghostty(lines, header):
     GHOSTTY_ACTIVE.write_text(f"# {header}\n" + "\n".join(lines) + ("\n" if lines else ""))
 
 
+def report(title, subtitle, rows):
+    print(f" {B(title)}   {D(subtitle)}")
+    for k, v in rows:
+        print(f"   {D(k.ljust(10))} {v}")
+    credit()
+
+
 def apply(name, wall="first", quiet=False):
+    """Everything a switch touches, gated by `theme targets`, then the live pass so nothing needs a reload."""
     migrate()
-    if name == "graphite":
-        write_ghostty([], "graphite — base Ghostty config rules (true-black monochrome)")
-        nvim_hook_write("graphite", None, GRAPHITE_LINES, "dark")
-        gset("org.gnome.desktop.interface", "accent-color", "slate")
-        gset("org.gnome.desktop.interface", "color-scheme", "prefer-dark")
-        gtk_clear()
-        gtk_generate("graphite", GRAPHITE_LINES, "#ffffff", "dark")
-        shell_apply("graphite", GRAPHITE_LINES, "#ffffff", "dark")
-        have = installed_icon_themes()
-        gset("org.gnome.desktop.interface", "icon-theme", "Papirus-Dark" if "Papirus-Dark" in have else "Adwaita")
-        (STATE / "active").write_text("graphite\n")
-        if not quiet:
-            print(f"{B('graphite')} · true-black OS: shell + GTK + Ghostty monochrome · wallpaper unchanged "
-                  f"{D('(theme wall <name|random>)')}")
-            credit()
-        return
-    d = themes().get(name)
-    if not d:
-        sys.exit(f"unknown theme: {name}   (theme list · theme sync)")
-    lines, decl_acc, mode = terminal_colors(d)
-    write_ghostty(lines, f"theme: {name}")
-    bgs = backgrounds(d)
-    if bgs:
-        set_wall(random.choice(bgs) if wall == "random" else bgs[0])
-    acc = hue_to_accent(decl_acc) if decl_acc else accent_from(lines)
-    if acc:
-        gset("org.gnome.desktop.interface", "accent-color", acc)
-    light = (mode == "light") or (d / "light.mode").exists()
-    gset("org.gnome.desktop.interface", "color-scheme", "default" if light else "prefer-dark")
-    sch = nvim_scheme(d)
-    nvim_hook_write(name, sch, lines, "light" if light else "dark")
-    bt = btop_apply(name, d)
-    gk = gtk_apply(d) or gtk_generate(name, lines, decl_acc, mode)
-    ic = icons_apply(d)
-    sh = shell_apply(name, lines, decl_acc, mode)
+    T = targets_state()
+    graphite = name == "graphite"
+    if graphite:
+        d, lines, decl_acc, light, sch = None, [], "#ffffff", False, None
+    else:
+        d = themes().get(name)
+        if not d:
+            sys.exit(f"unknown theme: {name}   (theme list · theme sync)")
+        lines, decl_acc, mode = terminal_colors(d)
+        light = (mode == "light") or (d / "light.mode").exists()
+        sch = nvim_scheme(d)
+    m = "light" if light else "dark"
+    gen = lines or GRAPHITE_LINES          # the palette every generated surface is derived from
+    r = {}
+
+    # desktop
+    if T["wallpaper"] and not graphite:
+        bgs = backgrounds(d)
+        if bgs:
+            set_wall(random.choice(bgs) if wall == "random" else bgs[0])
+        r["wallpaper"] = "set" if bgs else "none"
+    if T["accent"]:
+        acc = "slate" if graphite else (hue_to_accent(decl_acc) if decl_acc else accent_from(lines))
+        if acc:
+            gset("org.gnome.desktop.interface", "accent-color", acc)
+        gset("org.gnome.desktop.interface", "color-scheme", "default" if light else "prefer-dark")
+        pb = full_palette(gen)["bg"]
+        gset("org.gnome.desktop.background", "primary-color", pb)
+        gset("org.gnome.desktop.screensaver", "primary-color", pb)
+        r["accent"] = acc or "-"
+    if T["shell"]:
+        r["shell"] = "generated" if shell_apply(name, gen, decl_acc, m) else "-"
+    if T["gtk"]:
+        shipped = (not graphite) and (d / "gtk.css").exists()
+        if graphite:
+            gtk_clear()
+        (gtk_apply(d) if shipped else gtk_generate(name, gen, decl_acc, m))
+        g3 = gtk3_theme_apply(light)
+        r["gtk"] = ("shipped" if shipped else "generated") + (f" · {g3}" if g3 else "")
+    if T["icons"]:
+        r["icons"] = icons_apply(d, gen, decl_acc, m) or "-"
+    if T["cursor"]:
+        r["cursor"] = cursor_apply(light) or "-"
+
+    # terminals
+    if T["ghostty"]:
+        write_ghostty(lines, f"theme: {name}" if lines else "graphite — base Ghostty config rules (true-black monochrome)")
+        r["ghostty"] = f"{len(lines)} keys" if lines else "base config"
+    for key, cfg, active, frag in (("alacritty", ALACRITTY_CONFIG, ALACRITTY_ACTIVE, alacritty_fragment),
+                                   ("kitty", KITTY_CONFIG, KITTY_ACTIVE, kitty_fragment),
+                                   ("foot", FOOT_CONFIG, FOOT_ACTIVE, foot_fragment)):
+        if T[key] and cfg.exists():
+            active.parent.mkdir(parents=True, exist_ok=True)
+            active.write_text(frag(name, lines))
+            r[key] = "yes"
+    if T["tmux"] and tmux_config():
+        TMUX_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+        TMUX_ACTIVE.write_text(tmux_fragment(name, lines, decl_acc, m))
+        r["tmux"] = "yes"
+
+    # editors, browser
+    if T["nvim"]:
+        nvim_hook_write(name, sch, gen, m)
+        r["nvim"] = sch or "canvas"
+    if T["btop"] and not graphite:
+        r["btop"] = "yes" if btop_apply(name, d) else "-"
+    if T["vscode"]:
+        if graphite:
+            eds = editors_restore()
+            r["vscode"] = ("restored: " + ", ".join(eds)) if eds else "-"
+        else:
+            vn, ve = vscode_decl(d)
+            eds = editors_apply(vn, ve) if vn else []
+            r["vscode"] = f"{vn} → {', '.join(eds)}" if eds else (f"{vn} (extension not installed)" if vn else "-")
+    if T["browser"]:
+        br = browsers_apply(browser_rgb(d, gen))
+        r["browser"] = ", ".join(br) if br else "-"
     (STATE / "active").write_text(name + "\n")
-    if not quiet:
-        print(f"{B(name)} · ghostty {len(lines)} keys {D('(reload ctrl+shift+,)')} · wallpaper {'set' if bgs else 'none'} · "
-              f"accent {acc or '-'} · {'light' if light else 'dark'} · nvim {sch or '-'} · btop {'yes' if bt else '-'} · "
-              f"gtk {'yes' if gk else '-'} · icons {ic or '-'} · shell {'yes' if sh else '-'}")
-        credit()
+
+    # live
+    if T["live"]:
+        tl = terminals_live(lines)
+        nl = nvim_live() if T["nvim"] else 0
+        tm = tmux_live() if (T["tmux"] and "tmux" in r) else False
+        r["live"] = f"{tl} terminal{'s' if tl != 1 else ''} · {nl} neovim" + (" · tmux" if tm else "")
+
+    if quiet:
+        return
+    off = [n for n, _, _ in TARGETS if not T[n]]
+    line = lambda keys: " · ".join(f"{k} {r[k]}" for k in keys if k in r) or "-"
+    rows = [("desktop", line(("wallpaper", "shell", "gtk", "icons", "cursor"))),
+            ("terminals", line(("ghostty", "alacritty", "kitty", "foot", "tmux"))),
+            ("editors", line(("nvim", "btop", "vscode"))),
+            ("browser", r.get("browser", "-")),
+            ("live", r.get("live", "off"))]
+    if off:
+        rows.append(("targets off", ", ".join(off)))
+    sub = "true-black OS · wallpaper unchanged" if graphite else f"{m} · accent {r.get('accent', '-')}"
+    if lines and T["ghostty"]:
+        sub += "   (open windows recolored; ctrl+shift+, makes new Ghostty windows match)"
+    report(name, sub, rows)
 
 
 # ─────────────────────────────── browse ──────────────────────────────────────
@@ -1007,8 +1749,8 @@ def cmd_install(no_sync=False, no_extensions=False, minutes=30):
     print(f" {rule()}")
     if not no_sync:
         cmd_sync()
-    print(f"   {hook_ghostty()}")
-    print(f"   {hook_nvim()}")
+    for status in (hook_ghostty(), hook_nvim(), hook_alacritty(), hook_kitty(), hook_foot(), hook_tmux()):
+        print(f"   {status}")
     rotation_units(minutes)
     print(f"   timer: wallpaper rotation every {minutes} min")
     new_ext = 0
@@ -1030,13 +1772,17 @@ def cmd_install(no_sync=False, no_extensions=False, minutes=30):
             merged = list(dict.fromkeys(cur + want))
             gset("org.gnome.shell", "enabled-extensions", "[" + ", ".join(f"'{u}'" for u in merged) + "]")
             configure_desktop()
+            active, pending, stale, unlocked = activate_extensions()
             print(f"   extensions: {sum(1 for u, _ in EXTENSIONS if (EXT_DIR / u).exists())}/{len(EXTENSIONS)} present"
-                  + (f" · {new_ext} newly installed" if new_ext else "") + " · desktop configured")
+                  + (f" · {new_ext} newly installed" if new_ext else "") + f" · {len(active)} active now"
+                  + (f" · {len(pending)} after login" if pending else "") + (f" · {len(stale)} out of date" if stale else "")
+                  + " · desktop configured")
+            new_ext = len(pending)
     if active_name() == "graphite":
         apply("graphite", quiet=True)
     print(f" {rule()}")
-    print(f"   {B('next')}  theme pick   {D('·')}  theme icons {D('(icon + cursor packages)')}"
-          + (f"   {D('·')}  {B('log out and back in once')} {D('to activate the desktop layer')}" if new_ext else ""))
+    print(f"   {B('next')}  theme pick   {D('·')}  theme icons {D('(icon + cursor packages)')}   {D('·')}  theme targets"
+          + (f"   {D('·')}  {B('log out and back in once')} {D('so GNOME loads the new extensions')}" if new_ext else ""))
     credit()
     print()
 
@@ -1050,7 +1796,20 @@ def cmd_uninstall(purge=False):
         s = NVIM_INIT.read_text()
         s = "\n".join(l for l in s.splitlines() if NVIM_HOOK_LINE not in l and OLD_NVIM_HOOK not in l and f"-- {APP} hook" not in l)
         NVIM_INIT.write_text(s.rstrip() + "\n")
+    unhook_alacritty()
+    _unwire(KITTY_CONFIG, KITTY_INCLUDE)
+    _unwire(FOOT_CONFIG, FOOT_INCLUDE)
+    for conf in TMUX_CONFIGS:
+        _unwire(conf, TMUX_SOURCE)
+    for f in (KITTY_ACTIVE, FOOT_ACTIVE, TMUX_ACTIVE):
+        f.unlink(missing_ok=True)
+    editors_restore()
     gtk_clear()
+    icons_clear()
+    for key in ("gtk-theme", "icon-theme", "cursor-theme"):
+        greset("org.gnome.desktop.interface", key)
+    greset("org.gnome.desktop.background", "primary-color")
+    greset("org.gnome.desktop.screensaver", "primary-color")
     sd = EXT_DIR / USER_THEME_UUID / "schemas"
     if sd.exists():
         gset("org.gnome.shell.extensions.user-theme", "name", "", schemadir=sd)
@@ -1064,7 +1823,56 @@ def cmd_uninstall(purge=False):
         shutil.rmtree(STATE, ignore_errors=True)
         for d in SHELL_THEMES.glob("theme-*"):
             shutil.rmtree(d, ignore_errors=True)
-    print(f"uninstalled hooks, timers, GTK overrides" + (" · library and state purged" if purge else " · library kept (theme uninstall --purge)"))
+    print("uninstalled: hooks (ghostty, nvim, alacritty, kitty, foot, tmux), timers, GTK overrides, icon overlays, editor themes restored, gtk/icon/cursor settings reset"
+          + (" · library and state purged" if purge else " · library kept (theme uninstall --purge)"))
+
+
+def activate_extensions():
+    """Enable every present extension the running shell already knows. GNOME only discovers new extension
+    folders at login, so the rest are reported as pending rather than pretended."""
+    states = extension_states()
+    active, pending, stale = [], [], []
+    unlocked = False
+    if gget("org.gnome.shell", "disable-user-extensions") == "true":
+        # The global kill switch beats every per-extension setting: with it on, nothing user-installed ever runs.
+        gset("org.gnome.shell", "disable-user-extensions", "false")
+        unlocked = True
+    for uuid, _ in EXTENSIONS:
+        st = states.get(uuid, "missing")
+        if st == "missing":
+            continue
+        if st == "not loaded":
+            pending.append(uuid)
+        elif st.upper().startswith("OUT OF DATE"):
+            stale.append(uuid)
+        else:
+            if st.upper() != "ACTIVE" and not DRY:
+                subprocess.run(["gnome-extensions", "enable", uuid], capture_output=True)
+            active.append(uuid)
+    return active, pending, stale, unlocked
+
+
+def cmd_activate():
+    active, pending, stale, unlocked = activate_extensions()
+    sd = EXT_DIR / USER_THEME_UUID / "schemas"
+    if sd.exists():
+        gset("org.gnome.shell.extensions.user-theme", "name", f"theme-{active_name()}", schemadir=sd)
+    short = lambda us: ", ".join(u.split("@")[0] for u in us)
+    print()
+    print(f" {B('activate')}   {D('the GNOME desktop layer')}")
+    print(f" {rule()}")
+    if unlocked:
+        print(f"   {D('unlocked'.ljust(12))} user extensions were switched off globally (disable-user-extensions) — switched on")
+    print(f"   {D('active now'.ljust(12))} {len(active)}" + (f"  {D(short(active))}" if active else ""))
+    if pending:
+        print(f"   {D('after login'.ljust(12))} {len(pending)}  {D(short(pending))}")
+        print(f"   {'':<12} {B('log out and back in once')} {D('— GNOME only discovers new extension folders at login')}")
+    if stale:
+        print(f"   {D('out of date'.ljust(12))} {short(stale)}  {D('waiting for the author to support this GNOME release')}")
+    if not pending and not stale:
+        print(f"   {D('everything the desktop layer needs is loaded; shell theme:')} theme-{active_name()}")
+    print()
+    credit()
 
 
 # ─────────────────────────────── doctor / icons / schedule / io ──────────────
@@ -1117,7 +1925,22 @@ def cmd_doctor(verbose=False, as_json=False):
                ghostty_hook=GHOSTTY_CONFIG.exists() and GHOSTTY_INCLUDE in GHOSTTY_CONFIG.read_text(),
                nvim_hook=NVIM_INIT.exists() and NVIM_HOOK_LINE in NVIM_INIT.read_text(),
                rotation=subprocess.run(["systemctl", "--user", "is-active", "wallpaper-rotate.timer"], capture_output=True, text=True).stdout.strip(),
-               extensions={u: (EXT_DIR / u).exists() for u, _ in EXTENSIONS},
+               extensions=extension_states(),
+               user_extensions_disabled=gget("org.gnome.shell", "disable-user-extensions") == "true",
+               targets=targets_state(),
+               terminals=dict(ghostty=GHOSTTY_CONFIG.exists(), alacritty=ALACRITTY_CONFIG.exists(), kitty=KITTY_CONFIG.exists(),
+                              foot=FOOT_CONFIG.exists(), tmux=bool(tmux_config())),
+               hooks=dict(alacritty=ALACRITTY_CONFIG.exists() and ALACRITTY_IMPORT in ALACRITTY_CONFIG.read_text(),
+                          kitty=KITTY_CONFIG.exists() and KITTY_INCLUDE in KITTY_CONFIG.read_text(),
+                          foot=FOOT_CONFIG.exists() and FOOT_INCLUDE in FOOT_CONFIG.read_text(),
+                          tmux=bool(tmux_config()) and TMUX_SOURCE in tmux_config().read_text()),
+               live=dict(terminal_ptys=len(terminal_ptys()), neovim=len(nvim_sockets())),
+               browsers=[dict(name=b, running=run) for b, _, run in browsers_found()],
+               editors=[a for a, _, _ in editors_found()],
+               icon_packs=dict(papirus="Papirus" in installed_icon_themes(),
+                               yaru=any(n.startswith("Yaru") for n in installed_icon_themes()),
+                               bibata=any(n.startswith("Bibata") for n in installed_icon_themes()),
+                               adw_gtk3="adw-gtk3" in installed_gtk_themes()),
                themes=len(ts), wallpapers=sum(len(backgrounds(d)) for d in ts.values()), active=active_name())
     cov = []
     for n, d in ts.items():
@@ -1134,9 +1957,36 @@ def cmd_doctor(verbose=False, as_json=False):
     print(f"   {D('gnome'):<14} {env['gnome']}  {D('·')} {env['session']}")
     print(f"   {D('python'):<14} {env['python']}   {D('git')} {ok(env['git'])}   {D('fzf')} {ok(env['fzf'])}   {D('gext')} {ok(env['gext'])}")
     print(f"   {D('ghostty'):<14} {ok(env['ghostty'])} {D('· hook')} {ok(env['ghostty_hook'])}     {D('nvim')} {ok(env['nvim'])} {D('· hook')} {ok(env['nvim_hook'])}     {D('btop')} {ok(env['btop'])}")
-    present = sum(env["extensions"].values())
-    print(f"   {D('extensions'):<14} {present}/{len(EXTENSIONS)} present" + ("" if present == len(EXTENSIONS) else "  " + D("→ theme install")))
-    print(f"   {D('rotation'):<14} {env['rotation'] or 'off'}     {D('active')} {env['active']}")
+    st = env["extensions"]
+    n_active = sum(1 for v in st.values() if v.upper() == "ACTIVE")
+    n_pending = sum(1 for v in st.values() if v == "not loaded")
+    n_stale = [u.split("@")[0] for u, v in st.items() if v.upper().startswith("OUT OF DATE")]
+    n_missing = sum(1 for v in st.values() if v == "missing")
+    ext_line = f"{n_active}/{len(EXTENSIONS)} active"
+    if n_pending:
+        ext_line += f" · {n_pending} load at next login"
+    if n_stale:
+        ext_line += f" · out of date: {', '.join(n_stale)}"
+    if n_missing:
+        ext_line += f" · {n_missing} missing  " + D("→ theme install")
+    if n_pending:
+        ext_line += "  " + D("→ log out and back in once")
+    print(f"   {D('extensions'):<14} {ext_line}")
+    if env["user_extensions_disabled"]:
+        print(f"   {D('') :<14} user extensions are switched off globally (org.gnome.shell disable-user-extensions)  " + D("→ theme activate"))
+    hk = env["hooks"]
+    tline = " · ".join(f"{k} {'hook ok' if (k == 'ghostty' and env['ghostty_hook']) or hk.get(k) else ('present, no hook' if env['terminals'][k] else '-')}"
+                       for k in ("ghostty", "alacritty", "kitty", "foot"))
+    tline += " · tmux " + ("hook ok" if hk["tmux"] else ("opt-in" if not env["targets"]["tmux"] else ("present, no hook" if env["terminals"]["tmux"] else "-")))
+    print(f"   {D('terminals'):<14} {tline}")
+    print(f"   {D('live'):<14} {env['live']['terminal_ptys']} terminal pty(s) · {env['live']['neovim']} neovim socket(s)")
+    br = ", ".join(f"{b['name']}{' (running)' if b['running'] else ''}" for b in env["browsers"]) or "-"
+    print(f"   {D('browsers'):<14} {br}     {D('editors')} {', '.join(env['editors']) or '-'}")
+    ip = env["icon_packs"]
+    packs = " · ".join(f"{n} {'ok' if v else 'missing'}" for n, v in (("Papirus", ip["papirus"]), ("Yaru", ip["yaru"]), ("Bibata", ip["bibata"]), ("adw-gtk3", ip["adw_gtk3"])))
+    print(f"   {D('icon packs'):<14} {packs}" + ("" if all(ip.values()) else "  " + D("→ theme icons")))
+    off = [n for n, v in env["targets"].items() if not v]
+    print(f"   {D('rotation'):<14} {env['rotation'] or 'off'}     {D('active')} {env['active']}" + (f"     {D('targets off')} {', '.join(off)}" if off else ""))
     full = sum(1 for c in cov if c["full"])
     print(f"   {D('library'):<14} {env['themes']} themes · {env['wallpapers']} wallpapers · full-palette {full}/{len(cov)}")
     bad = [c for c in cov if not c["full"]]
@@ -1232,10 +2082,10 @@ GROUPS = [
         ("show <name>", "Open the author's composed desktop screenshot in your image viewer.", ["theme show synthwave84"]),
     ]),
     ("APPLY", [
-        ("<name> [random]", "Switch the whole OS: wallpaper (first or random), generated GNOME Shell theme, GTK apps (shipped gtk.css or generated libadwaita colors), accent + light/dark, Ghostty palette, nvim colorscheme, btop, icons.", ["theme moodpeak", "theme tokyo-night random"]),
+        ("<name> [random]", "Switch the whole OS, live: wallpaper (first or random), generated GNOME Shell theme, GTK apps, accent + light/dark, icons with accent-colored folders, cursor, Ghostty / Alacritty / Kitty / foot, tmux (opt-in), Neovim, btop, the browser frame, the editor theme. Every open terminal and Neovim recolors instantly; nothing to reload.", ["theme moodpeak", "theme tokyo-night random"]),
         ("random", "Apply a random theme everywhere.", ["theme random"]),
         ("next", "Step to the next theme alphabetically.", ["theme next"]),
-        ("graphite", "The true-black monochrome OS: shell, GTK apps, and terminal in pure black and white. Wallpaper is left alone.", ["theme graphite", "theme graphite && theme wall futurism"]),
+        ("graphite", "The true-black monochrome OS: shell, GTK apps, terminals, Neovim canvas and browser frame in pure black and white; editor themes restored. Wallpaper is left alone.", ["theme graphite", "theme graphite && theme wall futurism"]),
     ]),
     ("WALLPAPER", [
         ("wall <name|random>", "Wallpaper only — from one theme's set, or any of the 660+.", ["theme wall futurism", "theme wall random"]),
@@ -1251,8 +2101,10 @@ GROUPS = [
         ("credits", "Every theme author with their repository — the people this tool stands on.", ["theme credits"]),
     ]),
     ("SYSTEM", [
-        ("install [--no-sync] [--no-extensions]", "Idempotent setup: sync library, wire Ghostty + nvim hooks, rotation timer, GNOME extensions (dock, blur, tiling, rounded corners, user themes), desktop polish.", ["theme install"]),
-        ("uninstall [--purge]", "Reverse every hook and timer; --purge also deletes the library and state.", ["theme uninstall"]),
+        ("install [--no-sync] [--no-extensions]", "Idempotent setup: sync library, wire the Ghostty, Neovim, Alacritty, Kitty, foot (and opt-in tmux) hooks, rotation timer, GNOME extensions (dock, blur, tiling, rounded corners, user themes), desktop polish; enables what the running shell can load now.", ["theme install"]),
+        ("activate", "Enable the GNOME extensions the running shell already knows and select the generated shell theme; says exactly which ones still need one login.", ["theme activate"]),
+        ("target [on|off <name>]", "Choose what a switch may touch: wallpaper, shell, gtk, accent, icons, cursor, ghostty, alacritty, kitty, foot, tmux (opt-in), nvim, btop, browser, vscode, live.", ["theme targets", "theme target on tmux", "theme target off browser"]),
+        ("uninstall [--purge]", "Reverse every hook, timer, overlay and setting this tool made; editor themes are restored; --purge also deletes the library and state.", ["theme uninstall"]),
         ("icons", "Print the icon + cursor package line for your package manager (pacman/yay/paru/apt/dnf).", ["theme icons"]),
         ("doctor [-v|--json]", "Environment + coverage report: distro, GNOME, hooks, extensions, timers, palettes.", ["theme doctor"]),
         ("export / import <file>", "Save or restore your setup (active theme, schedule, added themes) as JSON.", ["theme export > setup.json", "theme import setup.json"]),
@@ -1307,11 +2159,15 @@ def cmd_help(topic=None):
     print(f" {B('WHAT A SWITCH CHANGES')}")
     for k, v in (("wallpaper", "GNOME picture-uri (+dark, +lock screen), zoom-fit"),
                  ("gnome shell", "generated ~/.themes/theme-<name>/ (top bar, overview, quick settings, popups, lock) via User Themes"),
-                 ("gtk apps", "theme gtk.css, or a generated libadwaita color sheet → ~/.config/gtk-4.0 + gtk-3.0 · icon theme if installed"),
-                 ("gnome", "accent color from the theme's accent · color-scheme dark/light from its mode"),
-                 ("terminal", "~/.config/ghostty/themes/active.conf — press ctrl+shift+, once; every open Ghostty window reloads"),
-                 ("nvim", "~/.config/colson-arch-theme/active-nvim.lua via the init.lua hook — declared colorscheme at VimEnter, editor canvas cleared to the terminal surface (graphite: true black)"),
-                 ("btop", "~/.config/btop/themes/<name>.theme + color_theme in btop.conf")):
+                 ("gtk apps", "theme gtk.css, or a generated libadwaita color sheet → ~/.config/gtk-4.0 + gtk-3.0 · adw-gtk3 / adw-gtk3-dark by mode when installed"),
+                 ("gnome", "accent color from the theme's accent · color-scheme dark/light from its mode · fallback desktop color"),
+                 ("icons", "the declared Yaru variant (-dark on dark themes), else Papirus with folders recolored to the accent · Bibata cursor: Ice on dark, Classic on light"),
+                 ("terminals", "Ghostty include · Alacritty import · Kitty include · foot include — open windows recolor instantly over OSC; ctrl+shift+, makes new Ghostty windows match"),
+                 ("tmux", "opt-in (theme target on tmux): status line, borders, messages, copy mode; sourced live"),
+                 ("nvim", "~/.config/colson-arch-theme/active-nvim.lua via the init.lua hook — declared colorscheme at VimEnter, canvas cleared to the terminal surface; every running Neovim re-themed over RPC"),
+                 ("btop", "~/.config/btop/themes/<name>.theme + color_theme in btop.conf"),
+                 ("browser", "Chromium / Chrome / Brave frame color from the theme — handed to the running browser, never launched"),
+                 ("editors", "VS Code / Cursor / VSCodium workbench.colorTheme when the theme's extension is already installed; graphite restores yours")):
         print(f"   {D(k):<20} {v}")
     print()
     print(f" {B('DOCTRINE')}")
@@ -1346,7 +2202,7 @@ def cmd_about(as_json=False):
     print()
     print(f" {B(APP)} {D('v' + VERSION)}   {D(CREDIT)}   {D(REPO_URL)}")
     print(f" {rule()}")
-    print(f"   {D('what'):<14} Omarchy-grade theming for GNOME on Arch — and any GNOME distro. Shell · GTK · Ghostty · nvim · btop · icons")
+    print(f"   {D('what'):<14} Omarchy-grade theming for GNOME on Arch — and any GNOME distro. Shell · GTK · icons · cursor · terminals · tmux · nvim · btop · browser · editors — live")
     print(f"   {D('library'):<14} {len(ts)} themes ({off} official, {len(ts) - off} community) · {walls} wallpapers · {size} on disk")
     print(f"   {D('active'):<14} {active_name()}")
     print(f"   {D('doctrine'):<14} Graphite true-black monochrome is the base; every palette is opt-in; nothing from a theme is ever executed")
@@ -1449,6 +2305,10 @@ def main(argv):
         return cmd_install(no_sync="--no-sync" in rest, no_extensions="--no-extensions" in rest)
     if c == "uninstall":
         return cmd_uninstall(purge="--purge" in rest)
+    if c == "activate":
+        return cmd_activate()
+    if c in ("target", "targets"):
+        return cmd_target(rest)
     if c == "icons":
         return cmd_icons()
     if c == "doctor":

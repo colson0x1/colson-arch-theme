@@ -16,7 +16,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "python3 -c \"import ast; ast.parse(open('bin/theme').read())\" && bin/theme --version && bin/theme help >/dev/null && bin/theme completions zsh >/dev/null",
+    "test": "python3 -c \"import ast; ast.parse(open('bin/theme').read())\" && bin/theme --version && bin/theme help >/dev/null && bin/theme completions zsh >/dev/null && bash tests/isolated.sh",
     "postinstall": "node -e \"console.log('\\ncolson-arch-theme installed. Next:  theme install   (then log out/in once)\\n')\""
   },
   "os": [
