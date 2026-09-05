@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+- Packaging. The `files` whitelist named the whole `bin/` directory, and npm's own rules say a path included through `files` cannot be excluded by `.npmignore` — so any stray file in that directory (Python bytecode, an editor backup) would ship. It now names `bin/theme` exactly. The redundant `.npmignore` is gone, and CI fails if the tarball ever contains anything other than the ten intended files.
+
 ## [1.0.2] — 2026-09-05
 
 ### Fixed

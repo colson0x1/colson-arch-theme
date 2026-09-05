@@ -17,6 +17,21 @@ jobs:
           bin/theme completions bash > /dev/null
           bin/theme completions fish > /dev/null
           bin/theme credits --plain > /dev/null
+      - name: tarball contains exactly the intended files
+        run: |
+          node -e "
+            const { execSync } = require('child_process');
+            const got = JSON.parse(execSync('npm pack --dry-run --json').toString())[0]
+              .files.map(f => f.path).sort();
+            const want = ['CHANGELOG.md', 'LICENSE', 'README.md', 'bin/theme',
+              'completions/theme.bash', 'completions/theme.fish', 'completions/theme.zsh',
+              'install.sh', 'manifest/themes.txt', 'package.json'];
+            if (got.join() !== want.join()) {
+              console.error('unexpected tarball contents\n  got:  ' + got.join(' ') + '\n  want: ' + want.join(' '));
+              process.exit(1);
+            }
+            console.log('tarball contents match');
+          "
       - name: manifest is well-formed
         run: grep -vE '^#|^$' manifest/themes.txt | awk 'NF!=2{print "bad line: " $0; bad=1} END{exit bad}'
       - name: shellcheck

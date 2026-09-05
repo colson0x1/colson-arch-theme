@@ -7,7 +7,7 @@
     "colson-arch-theme": "bin/theme"
   },
   "files": [
-    "bin/",
+    "bin/theme",
     "manifest/",
     "completions/",
     "install.sh",
