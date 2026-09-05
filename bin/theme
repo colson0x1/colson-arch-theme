@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # ─────────────────────────────── identity ────────────────────────────────────
 APP = "colson-arch-theme"
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 AUTHOR = "Colson"
 HANDLE = "@colson0x1"
 CREDIT = f"by {AUTHOR} ({HANDLE})"
