@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+- Neovim hook. It now applies at `VimEnter`, after every startup script, so a colorscheme set by your own plugins can no longer clobber it; it re-aligns on every later `:colorscheme`; and it clears the editor canvas (`Normal`, gutter, end-of-buffer, message area) to the terminal surface whenever the theme and the editor agree on light/dark. Neovim no longer sits in a differently colored box inside the terminal, and under Graphite the editor is true black. Scheme names are whitelisted before they reach Lua.
+- Ghostty wording. Ghostty re-reads its config only on `ctrl+shift+,`; new windows do not pick a theme up on their own. Help and README say so now, and the README explains `window-padding-color = extend` for an edge-to-edge terminal.
+
 ## [1.0.1] — 2026-09-04
 
 ### Fixed

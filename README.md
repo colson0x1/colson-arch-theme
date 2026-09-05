@@ -263,8 +263,8 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 | **GNOME Shell** | `~/.themes/theme-<name>/gnome-shell/gnome-shell.css` generated from the palette — top bar, overview, quick settings, popups, notifications, search, lock — loaded via User Themes |
 | **GTK apps** | the theme's `gtk.css` when shipped, otherwise a generated libadwaita sheet (`window`, `view`, `headerbar`, `sidebar`, `card`, `popover`, `accent`, `success`, `warning`, `error`) into `gtk-4.0` + `gtk-3.0` |
 | **GNOME** | accent color from the theme's accent · `color-scheme` from its mode |
-| **Ghostty** | palette to `~/.config/ghostty/themes/active.conf`, pulled by a one-line include — reload open windows with <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd>; new windows pick it up automatically |
-| **Neovim** | `active-nvim.lua` via a one-line hook in `init.lua` — sets the colorscheme if it is installed, no-ops otherwise |
+| **Ghostty** | palette to `~/.config/ghostty/themes/active.conf`, pulled by a one-line include — press <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> once and every open Ghostty window reloads |
+| **Neovim** | `active-nvim.lua` via a one-line hook in `init.lua` — applies the theme's declared colorscheme at `VimEnter` when it is installed, clears the editor canvas (`Normal`, gutter, end-of-buffer, message area) to the terminal surface whenever theme and editor agree on light/dark, and re-aligns after any later `:colorscheme` |
 | **btop** | theme file copied, `color_theme` set |
 | **Icons** | the theme's declared Yaru variant or Papirus, when installed |
 
@@ -275,7 +275,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 theme graphite && theme wall futurism
 ```
 
-Pure `#000000` surfaces, crisp `#edeef1` text, white accent — across the shell, every GTK app, and the terminal. The wallpaper is left alone, so the doctrine and the eye candy don't have to fight: a monochrome OS under a cinematic wallpaper.
+Pure `#000000` surfaces, crisp `#edeef1` text, white accent — across the shell, every GTK app, the terminal, and the Neovim canvas inside it. The wallpaper is left alone, so the doctrine and the eye candy don't have to fight: a monochrome OS under a cinematic wallpaper.
 
 <a id="day-night"></a>
 ## 🌗 Day / Night
@@ -430,9 +430,10 @@ Then drop the binary the way it came in: `npm uninstall -g colson-arch-theme` on
 |---|---|
 | `theme: command not found` after `npm i -g` | npm's global bin directory is not on your `PATH` — `export PATH="$(npm prefix -g)/bin:$PATH"` in your shell rc |
 | Top bar / overview did not recolor | User Themes is loaded at login only — log out and back in once, then apply the theme again; `theme doctor` shows whether the extension is present |
-| Ghostty still shows the old palette | Open windows reload with <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd>; new windows pick the palette up automatically |
+| Ghostty still shows the old palette | Ghostty re-reads its config only on reload — press <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> once; new windows do not pick it up on their own |
+| Neovim looks boxed inside the terminal, or the tmux bar stops short of the edges | Ghostty paints its window padding in the window background color, not in the cell colors. Add `window-padding-color = extend` to `~/.config/ghostty/config` and reload; the padding then continues the nearest cell, so the editor and the status bar run edge to edge |
 | GTK3 apps ignore the theme | Install `adw-gtk-theme` — it makes GTK3 apps read the same color sheet GTK4 apps do |
-| Neovim colorscheme did not change | The hook only switches when that colorscheme is installed in your config; `theme preview <name>` shows which scheme the theme declares |
+| Neovim colorscheme did not change | The hook applies at `VimEnter`, so restart Neovim after a switch. It changes the scheme only when the declared one is installed (`theme preview <name>` shows which), and it always aligns the editor canvas to the terminal when both are dark or both are light |
 | `theme pick` refuses to start | It needs `fzf` — `sudo pacman -S fzf` (or your distro's equivalent) |
 | Extensions were skipped during `install` | `gnome-extensions-cli` is installed on demand and needs `uv` or `pipx`; install one and re-run `theme install` |
 | The first `theme install` takes a while | It clones 133 repositories (about 5.5 GB); use `theme install --no-sync` and `theme sync --official` to start with 22 |

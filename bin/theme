@@ -369,6 +369,60 @@ def nvim_scheme(dirp):
     return m.group(1) if m else None
 
 
+NVIM_CANVAS = ("Normal", "NormalNC", "EndOfBuffer", "SignColumn", "LineNr", "LineNrAbove", "LineNrBelow",
+               "FoldColumn", "MsgArea")
+
+NVIM_HOOK_TEMPLATE = """-- colson-arch-theme · theme: @NAME@ · mode: @MODE@ · terminal background @BG@ · foreground @FG@
+-- Written by `theme @NAME@`, rewritten on every switch, removed by `theme uninstall`.
+local scheme, mode = @SCHEME@, "@MODE@"
+local canvas = { @GROUPS@ }
+
+-- Drop only a group's background; every other attribute survives.
+local function clear_bg(group)
+  if not vim.api.nvim_get_hl then return end
+  local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = group, link = false })
+  if not ok or type(hl) ~= "table" then return end
+  hl.bg, hl.ctermbg = nil, nil
+  pcall(vim.api.nvim_set_hl, 0, group, hl)
+end
+
+-- The editor canvas becomes the terminal surface, but only when both agree on light/dark.
+local function align()
+  if vim.o.background ~= mode then return end
+  for _, g in ipairs(canvas) do clear_bg(g) end
+end
+
+local function apply()
+  if scheme then pcall(vim.cmd.colorscheme, scheme) end
+  align()
+end
+
+-- VimEnter runs after every startup script, so nothing in your own config can clobber this;
+-- ColorScheme keeps the canvas aligned after any later switch.
+local group = vim.api.nvim_create_augroup("ColsonArchTheme", { clear = true })
+vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = align })
+if vim.v.vim_did_enter == 1 then apply() else
+  vim.api.nvim_create_autocmd("VimEnter", { group = group, once = true, callback = apply })
+end
+"""
+
+
+def nvim_hook_write(name, scheme, lines, mode):
+    """Write the Neovim hook: the declared colorscheme at VimEnter (after every startup script, so the
+    user's own plugins cannot clobber it), the editor canvas cleared to the terminal surface whenever the
+    theme and the editor agree on light/dark, re-aligned on every later :colorscheme. The scheme name is
+    whitelisted before it reaches Lua — a theme bundle is data, never code."""
+    if scheme and not re.fullmatch(r"[A-Za-z0-9_.-]+", scheme):
+        scheme = None
+    _, meta = palette_of(lines)
+    lua = (NVIM_HOOK_TEMPLATE.replace("@NAME@", name).replace("@MODE@", mode)
+           .replace("@BG@", meta.get("background", "-")).replace("@FG@", meta.get("foreground", "-"))
+           .replace("@SCHEME@", f'"{scheme}"' if scheme else "nil")
+           .replace("@GROUPS@", ", ".join(f'"{g}"' for g in NVIM_CANVAS)))
+    NVIM_HOOK.parent.mkdir(parents=True, exist_ok=True)
+    NVIM_HOOK.write_text(lua)
+
+
 # ─────────────────────────────── generation: shell + gtk ─────────────────────
 def _mix(a, b, t):
     ra, ga, ba = _rgb(a)
@@ -539,7 +593,7 @@ def apply(name, wall="first", quiet=False):
     migrate()
     if name == "graphite":
         write_ghostty([], "graphite — base Ghostty config rules (true-black monochrome)")
-        NVIM_HOOK.write_text("-- graphite: keep your default Neovim colorscheme\n")
+        nvim_hook_write("graphite", None, GRAPHITE_LINES, "dark")
         gset("org.gnome.desktop.interface", "accent-color", "slate")
         gset("org.gnome.desktop.interface", "color-scheme", "prefer-dark")
         gtk_clear()
@@ -567,8 +621,7 @@ def apply(name, wall="first", quiet=False):
     light = (mode == "light") or (d / "light.mode").exists()
     gset("org.gnome.desktop.interface", "color-scheme", "default" if light else "prefer-dark")
     sch = nvim_scheme(d)
-    NVIM_HOOK.write_text(f'-- theme: {name}\npcall(vim.cmd.colorscheme, "{sch}")\n' if sch
-                         else f"-- theme: {name}: no neovim colorscheme declared\n")
+    nvim_hook_write(name, sch, lines, "light" if light else "dark")
     bt = btop_apply(name, d)
     gk = gtk_apply(d) or gtk_generate(name, lines, decl_acc, mode)
     ic = icons_apply(d)
@@ -875,9 +928,9 @@ def hook_nvim():
         return "nvim: hook migrated to new path"
     if NVIM_HOOK_LINE in s:
         return "nvim: hook already wired"
-    s = s.rstrip() + f"\n\n-- {APP} hook: `theme <name>` writes this file; no-op under graphite\n{NVIM_HOOK_LINE}\n"
+    s = s.rstrip() + f"\n\n-- {APP} hook: `theme <name>` rewrites this file; it applies at VimEnter and aligns the editor canvas to the terminal\n{NVIM_HOOK_LINE}\n"
     NVIM_INIT.write_text(s)
-    NVIM_HOOK.write_text("-- graphite: keep your default Neovim colorscheme\n")
+    nvim_hook_write("graphite", None, GRAPHITE_LINES, "dark")
     return "nvim: hook wired"
 
 
@@ -1256,8 +1309,8 @@ def cmd_help(topic=None):
                  ("gnome shell", "generated ~/.themes/theme-<name>/ (top bar, overview, quick settings, popups, lock) via User Themes"),
                  ("gtk apps", "theme gtk.css, or a generated libadwaita color sheet → ~/.config/gtk-4.0 + gtk-3.0 · icon theme if installed"),
                  ("gnome", "accent color from the theme's accent · color-scheme dark/light from its mode"),
-                 ("terminal", "~/.config/ghostty/themes/active.conf — reload open windows with ctrl+shift+, (new windows auto)"),
-                 ("nvim", "~/.config/colson-arch-theme/active-nvim.lua via the init.lua hook — no-op under graphite"),
+                 ("terminal", "~/.config/ghostty/themes/active.conf — press ctrl+shift+, once; every open Ghostty window reloads"),
+                 ("nvim", "~/.config/colson-arch-theme/active-nvim.lua via the init.lua hook — declared colorscheme at VimEnter, editor canvas cleared to the terminal surface (graphite: true black)"),
                  ("btop", "~/.config/btop/themes/<name>.theme + color_theme in btop.conf")):
         print(f"   {D(k):<20} {v}")
     print()
