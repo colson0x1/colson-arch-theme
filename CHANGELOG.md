@@ -5,6 +5,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-05
+
+The whole desktop turns at once, and it turns live.
+
+### Added
+- **Live everywhere.** After a switch, every open terminal is recolored over OSC 4/10/11/12 (Ghostty, Kitty, Alacritty, foot, WezTerm, GNOME Console/Terminal, Ptyxis, Konsole and others), every running Neovim re-runs the hook over its RPC socket, and tmux re-sources its theme. No reload, no restart, no logout. Graphite sends the OSC reset forms so each terminal returns to its own configuration.
+- **Terminals.** Alacritty (`general.import`), Kitty (`include`) and foot (`include`) join Ghostty: one generated fragment per terminal, wired by `theme install` only when that terminal's config exists, removed by `theme uninstall`.
+- **tmux, opt-in.** `theme target on tmux` themes the status line, window tabs, pane borders, messages and copy mode from the palette and sources it live. Off by default so a hand-built status line is never overridden.
+- **Icons with accent-colored folders.** The declared Yaru variant when installed (with `-dark` on dark themes), else the variant nearest the accent; without Yaru, a user-level icon theme that inherits Papirus and swaps every folder icon for the Papirus color nearest the accent. Symlinks and an index only, no root, removed on uninstall.
+- **Cursor.** Bibata Modern Ice on dark themes, Classic on light, when installed.
+- **GTK3.** `adw-gtk3` / `adw-gtk3-dark` selected by mode when installed, so GTK3 apps read the same colors as libadwaita apps.
+- **Browser frame.** Chromium, Chrome, Brave, Vivaldi and Edge take the theme's frame color through their own `--set-theme-color`, only while running; nothing is launched behind your back.
+- **Editor theme.** VS Code, Cursor, VSCodium and Code - OSS switch `workbench.colorTheme` to the theme the bundle declares, only when that extension is already installed; nothing is ever installed. The previous value is remembered and Graphite or uninstall restores it. Only that one key is touched, comments and trailing commas survive.
+- **Targets.** `theme targets` lists what a switch may touch; `theme target on|off <name>` decides. Everything is on except tmux.
+- **`theme activate`.** Enables the GNOME extensions the running shell already knows (including User Themes when it was loaded but never enabled) and says exactly which ones still need one login.
+- GNOME fallback desktop color follows the theme, so the lock fade and any wallpaper gap match.
+
+### Changed
+- The GNOME Shell stylesheet covers far more of the shell: translucent glass surfaces with depth, quick settings toggles and sliders, calendar, notifications, OSD, dash, app grid, search results, workspace indicator, window switcher, dialogs, switches, scrollbars, lock and login. The stock stylesheet stays authoritative for layout.
+- The switch report is grouped: desktop, terminals, editors, browser, live.
+- `theme install` reports hooks for every terminal and enables whatever the running shell can load now; `theme doctor` shows extension states, terminals and hooks, live targets, browsers, editors and which icon packs are missing.
+- `theme uninstall` also removes the terminal fragments, the icon overlay, restores editor themes and resets the GTK, icon, cursor and fallback color settings.
+
+### Fixed
+- Color matching for icon variants and folder colors judges colorfulness by RGB chroma, so near-black and pale accents map to the right family.
+
 ## [1.0.2] — 2026-09-05
 
 ### Fixed
@@ -40,7 +66,8 @@ Initial release.
 - **`--dry-run`** on every state-changing command; every error path exits non-zero with a one-line message, never a traceback.
 - **Packaging** — npm (`colson-arch-theme`), PKGBUILD for pacman-native installs, from-source installer.
 
-[Unreleased]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/colson0x1/colson-arch-theme/releases/tag/v1.0.0

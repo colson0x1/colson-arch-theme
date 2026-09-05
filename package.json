@@ -1,7 +1,7 @@
 {
   "name": "colson-arch-theme",
-  "version": "1.0.2",
-  "description": "Omarchy-grade theming for GNOME on Arch Linux and any GNOME distro: 133 themes, 660 wallpapers, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, live-preview picker, wallpaper rotation, day/night scheduling, true-black Graphite base.",
+  "version": "1.1.0",
+  "description": "Omarchy-grade theming for GNOME on Arch Linux and any GNOME distro, live: 133 themes, 660 wallpapers, generated GNOME Shell + GTK theming, icons with accent-colored folders, cursor, Ghostty/Alacritty/Kitty/foot, tmux, Neovim, btop, browser frame and editor theme. Every open terminal and Neovim recolors instantly.",
   "bin": {
     "theme": "bin/theme",
     "colson-arch-theme": "bin/theme"
@@ -49,7 +49,16 @@
     "dotfiles",
     "ricing",
     "desktop",
-    "colson"
+    "colson",
+    "alacritty",
+    "kitty",
+    "foot",
+    "tmux",
+    "papirus",
+    "cursor",
+    "chromium",
+    "vscode",
+    "live-reload"
   ],
   "author": "Colson (@colson0x1)",
   "license": "MIT"

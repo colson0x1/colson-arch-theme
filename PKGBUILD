@@ -2,12 +2,17 @@
 pkgname=colson-arch-theme
 pkgver=1.0.0
 pkgrel=1
-pkgdesc="Omarchy-grade theming for GNOME on Arch — 133 themes, generated GNOME Shell + GTK theming, Ghostty/Neovim/btop, picker, rotation, scheduling"
+pkgdesc="Omarchy-grade theming for GNOME on Arch — 133 themes, live across GNOME Shell, GTK, icons, cursor, terminals, tmux, Neovim, btop, browser and editors"
 arch=('any')
 url="https://github.com/colson0x1/colson-arch-theme"
 license=('MIT')
 depends=('python>=3.11' 'git' 'gnome-shell' 'glib2')
 optdepends=('fzf: interactive picker (theme pick)'
+            'alacritty: terminal palette'
+            'kitty: terminal palette'
+            'foot: terminal palette'
+            'tmux: status line theme (opt-in)'
+            'chromium: browser frame color'
             'ghostty: terminal palette integration'
             'neovim: colorscheme hook'
             'btop: btop theme sync'
