@@ -2,7 +2,8 @@
 <h1>Colson Arch Theme (colson-arch-theme npm) 🎨</h1>
 <h2>Omarchy-grade Theming for GNOME on Arch Linux — by COLSON! 🚀</h2>
 <h3>133 Omarchy themes · 660 wallpapers · one command themes the ENTIRE OS</h3>
-<h3>GNOME Shell (generated) · GTK apps · Wallpaper · Accent · Ghostty · Neovim · btop · Icons</h3>
+<h3>GNOME Shell (generated) · GTK apps · Icons & Cursor · Ghostty / Alacritty / Kitty / foot · tmux · Neovim · btop · Browser · Editors</h3>
+<h2>⚡ LIVE — every open terminal, every Neovim, tmux and the browser frame turn the instant you switch ⚡</h2>
 <h2>🎯 Live-preview picker · Wallpaper rotation · Day/Night scheduling · True-black Graphite base 🔥</h2>
 <h2>Worldclass Desktop Experience for Engineers 💎</h2>
 
@@ -19,7 +20,9 @@
 
 Step into the most complete desktop theming system built for GNOME. **colson-arch-theme** takes the entire [Omarchy](https://omarchy.org) theme catalog — DHH's meticulously curated collection — and brings it to GNOME with something Omarchy itself never had to solve: it **generates a full GNOME Shell theme and a libadwaita color sheet from every palette**, so the top bar, overview, quick settings, notifications, lock screen, and every GTK app follow the theme. Not just your wallpaper. Not just your terminal. **The whole operating system.** 🔥
 
-Engineered for hand-tuned machines by someone who runs one: it never takes your system over. A true-black monochrome base called **Graphite** is the default; every one of the 133 palettes is opt-in — one command in, one command back. One dependency-free Python file. Nothing from a theme is ever executed. Every hook is idempotent and reversible.
+And it is **live**. Switch a theme and every open terminal recolors over OSC, every running Neovim re-themes over RPC, tmux re-sources, the browser frame follows, the editor follows, folders take the accent — in about a second, with no reload, no restart and no logout. Omarchy needs Alacritty to reload a file; macOS cannot do this at all.
+
+Engineered for hand-tuned machines by someone who runs one: it never takes your system over. A true-black monochrome base called **Graphite** is the default; every one of the 133 palettes is opt-in — one command in, one command back. One dependency-free Python file. Nothing from a theme is ever executed. Nothing is launched or installed behind your back. Every hook is idempotent and reversible, and `theme targets` decides exactly what a switch may touch.
 
 <a id="install-in-one-go"></a>
 ## ⚡ Install in One Go
@@ -58,6 +61,16 @@ Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -s
 ```
 *Every row carries a live true-color swatch rendered from the theme's actual palette.*
 
+```
+ catppuccin   dark · accent blue   (open windows recolored; ctrl+shift+, makes new Ghostty windows match)
+   desktop    wallpaper set · shell generated · gtk generated · adw-gtk3-dark · icons colson-arch-theme-papirus-blue-dark · cursor Bibata-Modern-Ice
+   terminals  ghostty 20 keys · alacritty yes · kitty yes · foot yes
+   editors    nvim catppuccin-nvim · btop yes · vscode Catppuccin Mocha → Cursor
+   browser    chromium, google-chrome-stable
+   live       3 terminals · 2 neovim
+```
+*A switch report: every layer it touched, and how many open terminals and Neovims turned live.*
+
 <a id="table-of-contents"></a>
 ## 📚 Table of Contents
 
@@ -67,6 +80,9 @@ Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -s
 - [🛠️ Installation](#installation) — [Requirements](#requirements) · [NPM](#installation-through-npm) · [Arch Linux / pacman](#installation-on-arch-linux-with-pacman) · [From source](#installation-from-source) · [Prerequisites by distro](#prerequisites-by-distro) · [First launch](#first-launch) · [Shell completions](#shell-completions)
 - [🧭 Commands](#commands)
 - [🎛️ What a Switch Changes](#what-a-switch-changes)
+- [⚡ Live Everywhere](#live-everywhere)
+- [🎚️ Targets](#targets)
+- [📁 Icons, Folders and Cursor](#icons-folders-and-cursor)
 - [🖤 Graphite — The True-Black OS](#graphite)
 - [🌗 Day / Night](#day-night)
 - [🖼️ Wallpaper Rotation](#wallpaper-rotation)
@@ -95,8 +111,13 @@ This project fixes that, and goes further than a color swap:
 | Theme catalog | 133 official + community | **the same 133 — synced from the source repos** |
 | Desktop shell | Waybar / Walker / Mako | **GNOME Shell theme generated per palette** |
 | Apps | GTK via theme `gtk.css` | **shipped `gtk.css` OR a generated libadwaita sheet — 133/133 coverage** |
-| Terminal | Alacritty / Ghostty / Kitty | Ghostty (whitelisted color keys only) |
-| Editor | Neovim (LazyVim) | Neovim (any config — one-line hook, silent fallback) |
+| Terminals | Alacritty / Ghostty / Kitty | Ghostty · Alacritty · Kitty · foot (whitelisted color keys only) |
+| Live switching | Alacritty re-reads its file | **every open terminal (OSC), every running Neovim (RPC), tmux, browser frame — instantly** |
+| Icons | Yaru variant | Yaru variant, or **Papirus with every folder recolored to the accent** · Bibata cursor by light/dark |
+| Browser | Chromium theme color | Chromium / Chrome / Brave / Vivaldi / Edge frame color — handed to a running browser only |
+| Editors | Neovim (LazyVim) · VS Code with extension install | Neovim (any config) · VS Code / Cursor / VSCodium — only when the extension is already installed, restored by Graphite |
+| Multiplexer | — | tmux status line, borders, messages, copy mode (opt-in) |
+| Control | — | `theme targets` — choose what a switch may touch |
 | Picker | Super+Alt+Space menu | `theme pick` — fzf with a live palette preview card |
 | Extras | menu-driven | wallpaper rotation timer · day/night schedule · export/import · doctor · `--dry-run` |
 | Base state | a theme, always | **Graphite: true-black monochrome OS, palettes opt-in** |
@@ -104,7 +125,11 @@ This project fixes that, and goes further than a color swap:
 <a id="features"></a>
 ## ✨ Features
 
-- 🎨 **OS-wide theming** — wallpaper (+dark, +lock screen), generated GNOME Shell theme, GTK4/GTK3 apps, accent color, light/dark mode, Ghostty, Neovim, btop, icon variants
+- ⚡ **Live everywhere** — open terminals recolor over OSC, running Neovims re-theme over RPC, tmux re-sources, the browser frame and editor follow; nothing to reload
+- 🎨 **OS-wide theming** — wallpaper (+dark, +lock screen), generated GNOME Shell theme, GTK4/GTK3 apps, accent color, light/dark mode, fallback desktop color, Ghostty / Alacritty / Kitty / foot, tmux, Neovim, btop
+- 📁 **Icons that follow the accent** — the declared Yaru variant, or Papirus with every folder recolored to the accent through a user-level overlay; Bibata cursor by light/dark
+- 🌐 **Browser and editor** — Chromium-family frame color while the browser runs; VS Code / Cursor / VSCodium theme when its extension is already installed, restored by Graphite
+- 🎚️ **Targets** — `theme targets` lists what a switch may touch; turn any layer off, or tmux on
 - 🧠 **Generated, not hand-written** — every theme gets a GNOME Shell stylesheet and a libadwaita color sheet derived from its palette; coverage is total
 - 🖤 **Graphite** — true-black monochrome base for the entire OS, always one command away
 - 🔍 **Live-preview picker** — fzf browser with a full palette card, sample text in the theme's own colors, <kbd>Enter</kbd> applies
@@ -135,8 +160,9 @@ This project fixes that, and goes further than a color swap:
 | **Node.js ≥ 18** | the npm install path only | npm path |
 | **fzf** | `theme pick`, the live-preview picker | optional |
 | **uv** or **pipx** | installs the GNOME extension set (`gnome-extensions-cli`) | optional |
-| **Ghostty · Neovim · btop** | integrations — auto-detected, silently skipped when absent | optional |
-| **Papirus / Yaru icons · adw-gtk-theme · Bibata cursor** | icon variants, GTK3 coverage, cursor — `theme icons` prints the exact line | optional |
+| **Ghostty · Alacritty · Kitty · foot · tmux · Neovim · btop** | integrations — auto-detected, silently skipped when absent; tmux is opt-in | optional |
+| **Chromium · Chrome · Brave · VS Code · Cursor · VSCodium** | browser frame color and editor theme — auto-detected | optional |
+| **Papirus / Yaru icons · adw-gtk-theme · Bibata cursor** | accent-colored folders, GTK3 coverage, cursor — `theme icons` prints the exact line | optional |
 
 <a id="installation-through-npm"></a>
 ### Installation through NPM (recommended)
@@ -212,7 +238,7 @@ theme icons          # prints the apt line for the icon + cursor packages
 
 `theme install` is idempotent and does five things: syncs the library (official bundle + community manifest — shallow, parallel clones, no theme code executed), wires the Ghostty include and the Neovim hook, starts the wallpaper-rotation timer, installs the curated GNOME extension set, and applies the desktop polish (dock, blur, boot-to-desktop, window buttons).
 
-**Log out and back in once** — GNOME Shell only discovers new extensions at login. Then:
+`theme install` enables every extension the running shell can already load. GNOME only discovers **newly installed** extension folders at login, so the first install ends with **log out and back in once**; `theme activate` tells you precisely which ones are waiting for that. Then:
 
 ```shell
 theme icons        # the icon + cursor package line for pacman / yay / paru / apt / dnf
@@ -247,7 +273,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 | **Apply** | `theme <name> [random]` · `theme random` · `theme next` · `theme graphite` |
 | **Wallpaper** | `theme wall <name\|random>` · `theme next-wall` · `theme rotate <min\|off>` · `theme schedule set HH:MM=theme …` |
 | **Library** | `theme sync [--official]` · `theme add <git-url> [name]` · `theme update` · `theme remove <name>` · `theme credits` |
-| **System** | `theme install [--no-sync] [--no-extensions]` · `theme uninstall [--purge]` · `theme icons` · `theme doctor [-v\|--json]` · `theme export` / `theme import <file>` · `theme completions <zsh\|bash\|fish>` |
+| **System** | `theme install [--no-sync] [--no-extensions]` · `theme activate` · `theme targets` / `theme target on\|off <name>` · `theme uninstall [--purge]` · `theme icons` · `theme doctor [-v\|--json]` · `theme export` / `theme import <file>` · `theme completions <zsh\|bash\|fish>` |
 | **Info** | `theme current [--json]` · `theme about [--json]` · `theme version` · `theme help [command]` |
 
 `theme help` is a full manual with grouped sections; `theme help <command>` is a deep-dive with examples. Bare `theme` prints the status dashboard: active theme, wallpaper, rotation, schedule, library size.
@@ -261,12 +287,67 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 |---|---|
 | **Wallpaper** | GNOME `picture-uri` + `picture-uri-dark` + lock screen, zoom-fit |
 | **GNOME Shell** | `~/.themes/theme-<name>/gnome-shell/gnome-shell.css` generated from the palette — top bar, overview, quick settings, popups, notifications, search, lock — loaded via User Themes |
-| **GTK apps** | the theme's `gtk.css` when shipped, otherwise a generated libadwaita sheet (`window`, `view`, `headerbar`, `sidebar`, `card`, `popover`, `accent`, `success`, `warning`, `error`) into `gtk-4.0` + `gtk-3.0` |
-| **GNOME** | accent color from the theme's accent · `color-scheme` from its mode |
-| **Ghostty** | palette to `~/.config/ghostty/themes/active.conf`, pulled by a one-line include — press <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> once and every open Ghostty window reloads |
-| **Neovim** | `active-nvim.lua` via a one-line hook in `init.lua` — applies the theme's declared colorscheme at `VimEnter` when it is installed, clears the editor canvas (`Normal`, gutter, end-of-buffer, message area) to the terminal surface whenever theme and editor agree on light/dark, and re-aligns after any later `:colorscheme` |
+| **GTK apps** | the theme's `gtk.css` when shipped, otherwise a generated libadwaita sheet (`window`, `view`, `headerbar`, `sidebar`, `card`, `popover`, `accent`, `success`, `warning`, `error`) into `gtk-4.0` + `gtk-3.0` · `adw-gtk3` / `adw-gtk3-dark` selected by mode when installed |
+| **GNOME** | accent color from the theme's accent · `color-scheme` from its mode · fallback desktop color behind the wallpaper and lock fade |
+| **Icons & cursor** | the declared Yaru variant (`-dark` on dark themes), else the variant nearest the accent; without Yaru, a Papirus overlay with every folder in the accent's color · Bibata Modern Ice on dark, Classic on light |
+| **Terminals** | Ghostty include · Alacritty `general.import` · Kitty `include` · foot `include` — one generated fragment each, and every **open** window recolors instantly over OSC; <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> makes **new** Ghostty windows match |
+| **tmux** | opt-in (`theme target on tmux`): status line, window tabs, pane borders, messages, copy mode — sourced live |
+| **Neovim** | `active-nvim.lua` via a one-line hook in `init.lua` — the declared colorscheme at `VimEnter` when installed, the canvas (`Normal`, gutter, end-of-buffer, message area) cleared to the terminal surface whenever theme and editor agree on light/dark, re-aligned after any `:colorscheme` — and every running instance re-themed over RPC |
 | **btop** | theme file copied, `color_theme` set |
-| **Icons** | the theme's declared Yaru variant or Papirus, when installed |
+| **Browser** | Chromium / Chrome / Brave / Vivaldi / Edge frame color through the browser's own `--set-theme-color`, only while it runs |
+| **Editors** | VS Code / Cursor / VSCodium / Code - OSS `workbench.colorTheme` when the bundle's extension is already installed; the previous value is remembered and Graphite restores it |
+
+<a id="live-everywhere"></a>
+## ⚡ Live Everywhere
+
+A switch does not leave you a list of things to reload. In about a second:
+
+| Surface | How it turns live |
+|---|---|
+| Open terminals | OSC 4 (16 slots), 10, 11, 12 and 17 written to the pty of every shell a running terminal emulator owns — Ghostty, Kitty, Alacritty, foot, WezTerm, GNOME Console / Terminal, Ptyxis, Konsole, Tilix, Black Box, Rio, Contour, Warp. Graphite sends the reset forms, so each terminal returns to its own config |
+| Running Neovims | `nvim --server <socket> --remote-expr` re-runs the hook in every instance found under `$XDG_RUNTIME_DIR`. No keys are sent; insert mode is never disturbed |
+| tmux | `tmux source-file` of the generated theme (when the tmux target is on) |
+| GNOME Shell | User Themes switches stylesheets live |
+| Browser | the browser's own IPC applies the frame color to the running instance |
+| Editors | VS Code and Cursor watch `settings.json` and re-theme themselves |
+
+What still needs a moment of yours: a **new** Ghostty window uses the config Ghostty loaded at startup, so press <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> once after a switch; GTK apps read `gtk.css` when they start; btop reads its theme on launch. Extensions installed after login need one logout, and `theme activate` names them.
+
+<a id="targets"></a>
+## 🎚️ Targets
+
+Every layer is a target you can switch off — or on, for the opt-in ones. Nothing else changes; `theme <name>` simply skips what you turned off.
+
+```shell
+theme targets                 # the list, with on/off and what each one touches
+theme target off browser      # never touch the browser frame
+theme target on tmux          # theme the tmux status line too (then: theme install, theme <name>)
+```
+
+| Target | Default | Touches |
+|---|---|---|
+| `wallpaper` | on | GNOME wallpaper, dark variant, lock screen |
+| `shell` | on | generated GNOME Shell theme via User Themes |
+| `gtk` | on | GTK4/GTK3 apps: shipped `gtk.css` or generated libadwaita colors; `adw-gtk3` by mode |
+| `accent` | on | GNOME accent color, light/dark `color-scheme`, fallback desktop color |
+| `icons` | on | Yaru variant, or Papirus with accent-colored folders |
+| `cursor` | on | Bibata Ice on dark, Classic on light |
+| `ghostty` · `alacritty` · `kitty` · `foot` | on | that terminal's palette fragment |
+| `tmux` | **off** | status line, borders, messages, copy mode — your own status design wins by default |
+| `nvim` | on | Neovim hook |
+| `btop` | on | btop theme |
+| `browser` | on | Chromium-family frame color, running browsers only |
+| `vscode` | on | VS Code-family `workbench.colorTheme`, only when the extension is installed |
+| `live` | on | the instant recolor pass |
+
+<a id="icons-folders-and-cursor"></a>
+## 📁 Icons, Folders and Cursor
+
+Most bundles declare a Yaru icon variant (`Yaru-blue`, `Yaru-magenta`, `Yaru-sage`, …). When Yaru is installed, that variant is used, `-dark` on dark themes; when a bundle declares none, the variant nearest the accent is chosen. Without Yaru, Papirus does something Omarchy never had: a **user-level icon theme** is generated under `~/.local/share/icons/` that inherits `Papirus-Dark` (or `Papirus` on light themes) and points every folder icon at the Papirus folder color nearest the accent — blue folders for Catppuccin, violet for a purple theme, white for Graphite. Only symlinks and an `index.theme` are written; no root, no files modified, removed by `theme uninstall`. The cursor follows the mode: Bibata Modern Ice (white) on dark themes, Bibata Modern Classic (black) on light ones.
+
+```shell
+theme icons        # prints the package line: Papirus + Yaru icons, adw-gtk3, Bibata — for your package manager
+```
 
 <a id="graphite"></a>
 ## 🖤 Graphite — The True-Black OS
@@ -275,7 +356,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 theme graphite && theme wall futurism
 ```
 
-Pure `#000000` surfaces, crisp `#edeef1` text, white accent — across the shell, every GTK app, the terminal, and the Neovim canvas inside it. The wallpaper is left alone, so the doctrine and the eye candy don't have to fight: a monochrome OS under a cinematic wallpaper.
+Pure `#000000` surfaces, crisp `#edeef1` text, white accent — across the shell, every GTK app, the terminals, the Neovim canvas, the browser frame, white folders on Papirus, and tmux when it is a target; editor themes go back to yours. The wallpaper is left alone, so the doctrine and the eye candy don't have to fight: a monochrome OS under a cinematic wallpaper.
 
 <a id="day-night"></a>
 ## 🌗 Day / Night
@@ -302,7 +383,7 @@ theme wall moodpeak       # one from a specific theme's set
 <a id="the-gnome-layer"></a>
 ## 🧩 The GNOME Layer
 
-`theme install` sets up nine extensions — every one GNOME 45–50 compatible — through `gnome-extensions-cli`, installed on demand with `uv` or `pipx`. Skip the whole layer with `theme install --no-extensions`.
+`theme install` sets up nine extensions through `gnome-extensions-cli`, installed on demand with `uv` or `pipx`, and enables every one the running shell can already load. GNOME learns about newly installed extension folders only at login, and an extension whose metadata does not list your GNOME release stays out of date until its author updates it; `theme activate` and `theme doctor` report both cases by name. Skip the whole layer with `theme install --no-extensions`.
 
 | Extension | Role |
 |---|---|
@@ -365,14 +446,19 @@ theme import ~/theme-setup.json                                       # restore 
 ## 🏗️ Architecture
 
 ```
-theme <name>
+theme <name>                                  every step gated by `theme targets`
   ├─ terminal_colors()   colors.toml (both dialects) → ghostty.conf → alacritty.toml → kitty.conf   whitelist extraction
-  ├─ set_wall()          gsettings picture-uri · picture-uri-dark · screensaver
+  ├─ set_wall()          gsettings picture-uri · picture-uri-dark · screensaver · primary-color
   ├─ shell_apply()       ~/.themes/theme-<name>/gnome-shell/gnome-shell.css   (@import stock resource, override colors)
-  ├─ gtk_apply()         shipped gtk.css  →  or gtk_generate(): libadwaita @define-color sheet
-  ├─ accent + mode       org.gnome.desktop.interface accent-color · color-scheme
-  ├─ Ghostty · Neovim · btop · icons
-  └─ state               ~/.config/colson-arch-theme/active
+  ├─ gtk_apply()         shipped gtk.css  →  or gtk_generate(): libadwaita @define-color sheet · adw-gtk3 by mode
+  ├─ icons_apply()       Yaru variant  →  or papirus_overlay(): ~/.local/share/icons/<overlay>/ with accent folders
+  ├─ cursor_apply()      Bibata by mode
+  ├─ fragments           ghostty · alacritty · kitty · foot · tmux (opt-in)
+  ├─ nvim_hook_write()   ~/.config/colson-arch-theme/active-nvim.lua
+  ├─ browsers_apply()    --set-theme-color to running Chromium-family browsers
+  ├─ editors_apply()     workbench.colorTheme where the extension is installed
+  ├─ state               ~/.config/colson-arch-theme/active
+  └─ live                terminals_live() OSC → nvim_live() RPC → tmux_live()
 ```
 
 - **One dependency-free Python file** (`bin/theme`) ships identically via npm, the PKGBUILD, and a git clone — no runtime, no framework, nothing to break.
@@ -391,6 +477,7 @@ These are the laws this project is engineered around — the reason it can live 
 4. **Themes are never vendored.** 5.5 GB and 111 authors' licenses stay where they belong — `theme sync` clones, `theme credits` credits.
 5. **Monochrome chrome.** Color appears only where color *is* the information — the swatches.
 6. **No network surprises.** The only network activity is `git clone` / `git pull` of the repositories you asked for. No telemetry, no update checks, no pipe-to-shell.
+7. **Nothing runs behind your back.** Browsers are never launched to be recolored, editor extensions are never installed, tmux is opt-in, and every layer can be switched off.
 
 <a id="compatibility"></a>
 ## 🐧 Compatibility
@@ -399,6 +486,7 @@ These are the laws this project is engineered around — the reason it can live 
 - **Every Arch flavor**: Manjaro, EndeavourOS, CachyOS, Garuda, ArcoLinux — anything with GNOME.
 - **Any GNOME distro works**: Fedora Workstation, Ubuntu, Debian, openSUSE — GNOME is the only hard dependency; `theme icons` prints the `apt` / `dnf` lines.
 - **Wayland and X11** — every mechanism is `gsettings`, GNOME Shell stylesheets, and GTK CSS; none of it depends on the session type.
+- **Any terminal that speaks OSC 4/10/11/12** recolors live, whether or not it has a config fragment: Ghostty, Kitty, Alacritty, foot, WezTerm, GNOME Console and Terminal, Ptyxis, Konsole, Tilix, Black Box, Rio, Contour, Warp.
 
 <a id="updating"></a>
 ## 🔄 Updating
@@ -415,7 +503,8 @@ pacman path: pull the clone and rebuild — `git pull && makepkg -si`.
 ## 🧯 Uninstall
 
 ```shell
-theme uninstall             # reverses hooks, timers, and GTK overrides; keeps the library
+theme uninstall             # reverses every hook (Ghostty, Neovim, Alacritty, Kitty, foot, tmux), timers, GTK overrides,
+                            # the icon overlay and the gtk/icon/cursor settings; restores editor themes; keeps the library
 theme uninstall --purge     # also removes the library and state
 ```
 
@@ -429,7 +518,11 @@ Then drop the binary the way it came in: `npm uninstall -g colson-arch-theme` on
 | Symptom | Cause · Fix |
 |---|---|
 | `theme: command not found` after `npm i -g` | npm's global bin directory is not on your `PATH` — `export PATH="$(npm prefix -g)/bin:$PATH"` in your shell rc |
-| Top bar / overview did not recolor | User Themes is loaded at login only — log out and back in once, then apply the theme again; `theme doctor` shows whether the extension is present |
+| Top bar / overview did not recolor | Run `theme activate` — it enables User Themes when GNOME has already loaded it and names the extensions that still need one logout. After the login, apply the theme once more |
+| Icons, folders or cursor did not change | No icon or cursor pack is installed; `theme icons` prints the package line. Folder recoloring needs Papirus, the cursor needs Bibata, GTK3 coverage needs `adw-gtk3` |
+| Browser frame did not change | The color is handed only to a running browser, never to a launched one; switch again while it runs, or leave it on the next switch |
+| Editor theme did not change | The bundle's extension is not installed in that editor, and nothing is ever installed for you; the report says so by name |
+| I don't want a layer touched | `theme target off <name>` — see [Targets](#targets) |
 | Ghostty still shows the old palette | Ghostty re-reads its config only on reload — press <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> once; new windows do not pick it up on their own |
 | Neovim looks boxed inside the terminal, or the tmux bar stops short of the edges | Ghostty paints its window padding, and the leftover strip when the cell height does not divide the window height, in the window background color. For an edge-to-edge grid set `window-padding-x = 0` and `window-padding-y = 0`, then pick `adjust-cell-height` so the cell height divides your screen height exactly (on a 1080px screen, a 24px cell gives 45 rows), and restart Ghostty — padding changes apply to new windows only. `window-padding-color = extend` is the alternative, but it stretches whatever sits at the edge, a colored tmux tab included |
 | GTK3 apps ignore the theme | Install `adw-gtk-theme` — it makes GTK3 apps read the same color sheet GTK4 apps do |
@@ -449,7 +542,7 @@ theme doctor -v      # your own machine, any time
 npm test             # parse + smoke, no GNOME required
 ```
 
-CI runs on every push: compile, smoke, manifest validation, `shellcheck` on the installer.
+CI runs on every push: compile, smoke, an exact check of the tarball's contents, manifest validation, `shellcheck` on the installer. The live layer, the icon overlay, the terminal hooks and the editor integration are exercised in an isolated home with stubbed system commands, so nothing in the suite can touch a real desktop.
 
 <a id="versioning"></a>
 ## 🧾 Versioning
