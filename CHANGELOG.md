@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-09-06
+
+The forge and the Colson pack.
+
+### Added
+- **`theme forge [name|all] [--styles …] [--size WxH] [--out DIR] [--svg|--png] [--seed N]`.** Original wallpapers generated from any theme's palette in eight styles: `topology` (regions, replication, a consistent-hashing ring), `rack` (a 42U data-center row with live LEDs), `phosphor` (a scrolling cluster log on a CRT), `circuit` (PCB traces, ICs, silkscreen), `spectrum` (an SDR waterfall), `grid` (golden-ratio minimalism), `contour` (Bay-fog terrain with a low sun), `lamport` (happens-before with vector clocks). Deterministic per theme and style, resolution-independent SVG, rendered to 4K PNG through `rsvg-convert` when present. They join the theme's wallpaper set through an overlay under `_forge/`; third-party bundles are never written to. `theme forge all` renders SVG for the whole library.
+- **The Colson pack** — nine original themes shipped as their own bundle collection and part of the default library: `phosphor`, `amber`, `hyperscale`, `quorum`, `platinum`, `fog`, `golden`, `cupertino` (light), `zeroday`. Each carries a full 16-color palette, an icon variant, a browser frame color, an editor theme where one fits, and four forged wallpapers.
+- **Collections.** Any clone laid out as `_<name>/themes/*` is a bundle collection beside the official Omarchy repo; `theme list` groups official, Colson pack and community; bundles inside a collection cannot be removed by `theme remove`.
+
+### Changed
+- SVG counts as a wallpaper format; GNOME renders it through librsvg, so a forge without `rsvg-convert` still works.
+
 ## [1.1.2] — 2026-09-06
 
 ### Added
@@ -83,7 +95,8 @@ Initial release.
 - **`--dry-run`** on every state-changing command; every error path exits non-zero with a one-line message, never a traceback.
 - **Packaging** — npm (`colson-arch-theme`), PKGBUILD for pacman-native installs, from-source installer.
 
-[Unreleased]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/colson0x1/colson-arch-theme/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.2...v1.1.0
