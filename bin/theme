@@ -490,6 +490,7 @@ TARGETS = [  # name, default, what `theme <name>` touches
     ("browser", True, "Chromium / Chrome / Brave frame color, applied to a running browser"),
     ("vscode", True, "VS Code / Cursor / VSCodium colorTheme, only when that theme's extension is already installed"),
     ("live", True, "instant recolor of every open terminal (OSC), Neovim (RPC) and tmux; nothing to reload"),
+    ("font", True, "system and shell font: JetBrains Mono for themes that declare font = \"mono\", the GNOME default otherwise"),
 ]
 TARGET_DEFAULT = {n: d for n, d, _ in TARGETS}
 TARGETS_FILE = STATE / "targets"
@@ -1368,7 +1369,7 @@ def _f_grid(c, rng, W, H, s):
     o.append(f'<circle cx="{_num(gx)}" cy="{_num(gy)}" r="{_num(40 * s)}" fill="none" stroke="{acc}" stroke-opacity="0.35" stroke-width="{_num(1.5 * s)}"/>')
     for x, y, dx, dy in ((160 * s, 160 * s, 1, 1), (W - 160 * s, 160 * s, -1, 1), (160 * s, H - 160 * s, 1, -1), (W - 160 * s, H - 160 * s, -1, -1)):
         o.append(f'<path d="M{_num(x)},{_num(y + dy * 60 * s)} L{_num(x)},{_num(y)} L{_num(x + dx * 60 * s)},{_num(y)}" fill="none" stroke="{fg}" stroke-opacity="0.35" stroke-width="{_num(2 * s)}"/>')
-    o.append(f'<text x="{_num(gx + 40 * s)}" y="{_num(gy - 28 * s)}" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(5 * s)}">φ · 37.4419° N · 122.1430° W</text>')
+    o.append(f'<text x="{_num(gx + 40 * s)}" y="{_num(gy - 28 * s)}" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(5 * s)}">φ · {c["coords"]}</text>')
     o.append(f'<text x="{_num(W - 160 * s)}" y="{_num(H - 190 * s)}" text-anchor="end" font-size="{_num(22 * s)}" fill="{_rgba(fg, 0.25)}" letter-spacing="{_num(6 * s)}">{W}×{H} · 16:9</text>')
     return o
 
@@ -1402,7 +1403,7 @@ def _f_contour(c, rng, W, H, s):
                     segs.append(f"M{_num(edges[e1][0])},{_num(edges[e1][1])}L{_num(edges[e2][0])},{_num(edges[e2][1])}")
         hero = li == 9
         o.append(f'<path d="{"".join(segs)}" fill="none" stroke="{acc if hero else fg}" stroke-opacity="{0.55 if hero else 0.10 + 0.08 * (li % 2)}" stroke-width="{_num((2.4 if hero else 1.4) * s)}" stroke-linecap="round"/>')
-    o.append(f'<text x="{_num(160 * s)}" y="{_num(H - 190 * s)}" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(5 * s)}">37.4419° N · 122.1430° W · 14 contours</text>')
+    o.append(f'<text x="{_num(160 * s)}" y="{_num(H - 190 * s)}" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(5 * s)}">{c["coords"]} · 14 contours</text>')
     return o
 
 
@@ -1448,22 +1449,24 @@ FORGE_FN = {"topology": _f_topology, "rack": _f_rack, "phosphor": _f_phosphor, "
             "spectrum": _f_spectrum, "grid": _f_grid, "contour": _f_contour, "lamport": _f_lamport}
 
 
-def forge_svg(name, style, lines, decl_acc, mode, size=(3840, 2160), seed=None):
+def forge_svg(name, style, lines, decl_acc, mode, size=(3840, 2160), seed=None, coords=None):
     """One wallpaper: deterministic for (theme, style) unless a seed is given; every color comes from the palette."""
     W, H = size
     c = scheme_from(lines, decl_acc, mode)
     c["p"] = full_palette(lines)["p"]
+    c["coords"] = coords or DEFAULT_COORDS
     rng = random.Random(zlib.crc32(f"{name}:{style}".encode()) if seed is None else seed)
     body = FORGE_FN[style](c, rng, W, H, W / 3840)
     return _svg_head(W, H, c, rng.randrange(1000), phosphor=(style == "phosphor")) + "\n".join(body) + "\n" + _svg_tail()
 
 
-def forge_render(name, style, lines, decl_acc, mode, out_dir, size=(3840, 2160), png=True, seed=None):
+def forge_render(name, style, lines, decl_acc, mode, out_dir, size=(3840, 2160), png=True, seed=None, coords=None):
     out_dir.mkdir(parents=True, exist_ok=True)
-    svg_path = out_dir / f"{style}.svg"
-    svg_path.write_text(forge_svg(name, style, lines, decl_acc, mode, size, seed))
+    stem = style if seed is None else f"{style}-{seed}"
+    svg_path = out_dir / f"{stem}.svg"
+    svg_path.write_text(forge_svg(name, style, lines, decl_acc, mode, size, seed, coords))
     if png and shutil.which("rsvg-convert"):
-        png_path = out_dir / f"{style}.png"
+        png_path = out_dir / f"{stem}.png"
         r = subprocess.run(["rsvg-convert", "-w", str(size[0]), "-h", str(size[1]), "-o", str(png_path), str(svg_path)],
                            capture_output=True, timeout=600)
         if r.returncode == 0 and png_path.exists():
@@ -1521,7 +1524,8 @@ def cmd_forge(args):
         if DRY:
             print(f"  [dry-run] forge {name}: {', '.join(styles)} → {dest} ({size[0]}x{size[1]}, {'png' if png else 'svg'})")
             continue
-        files = [forge_render(name, st, lines, decl_acc, mode, dest, size, png, seed) for st in styles]
+        coords = shell_knobs(ts.get(name), mode if mode else "dark")["coords"] if name in ts else DEFAULT_COORDS
+        files = [forge_render(name, st, lines, decl_acc, mode, dest, size, png, seed, coords) for st in styles]
         kinds = "png" if all(f.suffix == ".png" for f in files) else ("svg" if all(f.suffix == ".svg" for f in files) else "mixed")
         print(f" {B('forge')} {name:<22} {len(files)} wallpapers  {D(kinds + ' · ' + str(size[0]) + 'x' + str(size[1]))}  → {D(tilde(dest))}")
     if not DRY:
@@ -1749,14 +1753,63 @@ StScrollBar StButton#vhandle:hover, StScrollBar StButton#hhandle:hover, StScroll
 
 /* lock and login */
 .unlock-dialog, .login-dialog { background-color: @SHIELD@; color: @FG@; }
+
+/* design: typography, radius, glass — from the bundle's gnome.toml, defaults otherwise */
+@STAGE_FONT@
+#panel .clock, #panel .panel-button { letter-spacing: 0.5px; }
+.search-entry { border-radius: @R@px; width: 30em; }
+.overview-tile, .grid-search-result, .app-folder, .list-search-result { border-radius: @R@px; }
+.app-folder-dialog, .popup-menu-content, .candidate-popup-content, .quick-settings, .modal-dialog, .switcher-list, .workspace-switcher, .osd-window { border-radius: @R2@px; }
+.quick-toggle, .quick-slider, .quick-settings .icon-button, .quick-settings-system-item .icon-button, .quick-toggle-menu, .message, .events-button, .world-clocks-button, .weather-button, .notification-button { border-radius: @R@px; }
+.quick-toggle, .quick-slider, .quick-settings .icon-button { border: 1px solid @BORDER@; }
+#dash .dash-background { border-radius: @R2@px; }
+.workspace-thumbnails .workspace-thumbnail { border-radius: @RS@px; }
+.window-close, .screenshot-ui-close-button { background-color: @ACC@; color: @ACC_FG@; }
 """
 
 
-def shell_css(name, lines, decl_acc, mode):
+DEFAULT_COORDS = "37.4419° N · 122.1430° W"
+MONO_FONT = "JetBrainsMono Nerd Font"
+
+
+def shell_knobs(dirp, mode):
+    """Design knobs a bundle may declare in gnome.toml — font = "mono"|"sans", radius = 0–40, glass = 0.5–1,
+    coords = "…" — every value validated; defaults are sans, 16, 0.92, Palo Alto."""
+    k = dict(font="sans", radius=16, glass=0.92, coords=DEFAULT_COORDS)
+    f = dirp / "gnome.toml" if dirp else None
+    if f and f.exists():
+        try:
+            d = tomllib.loads(f.read_text(errors="ignore"))
+        except Exception:
+            d = {}
+        if d.get("font") in ("mono", "sans"):
+            k["font"] = d["font"]
+        if isinstance(d.get("radius"), (int, float)) and 0 <= d["radius"] <= 40:
+            k["radius"] = int(d["radius"])
+        if isinstance(d.get("glass"), (int, float)) and 0.5 <= d["glass"] <= 1:
+            k["glass"] = float(d["glass"])
+        if isinstance(d.get("coords"), str) and re.fullmatch(r"[0-9.° NSEW·a-z\- ]{5,48}", d["coords"]):
+            k["coords"] = d["coords"]
+    return k
+
+
+def mono_font_installed():
+    try:
+        out = subprocess.run(["fc-list", ":", "family"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return MONO_FONT.lower() in out.lower()
+
+
+def shell_css(name, lines, decl_acc, mode, knobs=None):
     c = scheme_from(lines, decl_acc, mode)
+    k = knobs or shell_knobs(None, mode)
+    r = k["radius"]
+    stage_font = (f'stage {{ font-family: "{MONO_FONT}", "JetBrains Mono", monospace; font-size: 10.5pt; }}' if k["font"] == "mono" else "")
     tokens = {"@NAME@": name, "@APP@": APP, "@CREDIT@": CREDIT, "@FG@": c["fg"], "@ACC@": c["acc"], "@ACC_FG@": c["acc_fg"],
               "@SURFACE2@": c["surface2"], "@BORDER@": c["border"], "@PANEL@": _rgba(c["bg"], 0.72),
-              "@POPUP@": _rgba(c["surface"], 0.92), "@DASH@": _rgba(c["bg"], 0.62), "@SHIELD@": _rgba(c["bg"], 0.55),
+              "@POPUP@": _rgba(c["surface"], k["glass"]), "@DASH@": _rgba(c["bg"], 0.62), "@SHIELD@": _rgba(c["bg"], 0.55),
+              "@STAGE_FONT@": stage_font, "@R@": str(r), "@R2@": str(int(r * 1.5)), "@RS@": str(max(4, r // 2)),
               "@BG@": c["bg"], "@SURFACE@": c["surface"],
               "@ACC14@": _rgba(c["acc"], 0.14), "@ACC18@": _rgba(c["acc"], 0.18), "@ACC20@": _rgba(c["acc"], 0.20),
               "@ACC22@": _rgba(c["acc"], 0.22), "@ACC24@": _rgba(c["acc"], 0.24), "@ACC28@": _rgba(c["acc"], 0.28),
@@ -1768,12 +1821,12 @@ def shell_css(name, lines, decl_acc, mode):
     return css
 
 
-def shell_apply(name, lines, decl_acc, mode):
-    """Generate a GNOME Shell theme (imports the stock stylesheet, overrides colors) and select it through User Themes.
+def shell_apply(name, lines, decl_acc, mode, knobs=None):
+    """Generate a GNOME Shell theme layered over the stock stylesheet and select it through User Themes.
     The selection is written even before the extension is loaded, so it takes effect the moment it is."""
     d = SHELL_THEMES / f"theme-{name}" / "gnome-shell"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "gnome-shell.css").write_text(shell_css(name, lines, decl_acc, mode))
+    (d / "gnome-shell.css").write_text(shell_css(name, lines, decl_acc, mode, knobs))
     sd = EXT_DIR / USER_THEME_UUID / "schemas"
     if sd.exists():
         if gget("org.gnome.shell.extensions.user-theme", "name", schemadir=sd) == f"theme-{name}":
@@ -1801,29 +1854,44 @@ def dock_apply(c):
 
 
 def gtk_generate(name, lines, decl_acc, mode):
-    """libadwaita named colors from the palette → GTK4 + GTK3 apps recolor (when a theme ships no gtk.css)."""
+    """libadwaita colors from the palette. GNOME 47+ apps read CSS variables (--window-bg-color …); older libadwaita
+    and adw-gtk3 read the @define-color names; plain GTK3 themes read theme_bg_color and friends. All three are written."""
     c = scheme_from(lines, decl_acc, mode)
     shade = "rgba(0,0,0,0.36)" if not c["light"] else "rgba(0,0,0,0.07)"
     view = _mix(c["bg"], "#000000", 0.25) if not c["light"] else "#ffffff"
-    css = f"""/* theme: {name} — libadwaita colors generated by {APP} ({CREDIT}) — {MANAGED} */
-@define-color accent_bg_color {c['acc']}; @define-color accent_fg_color {c['acc_fg']}; @define-color accent_color {c['acc']};
-@define-color destructive_bg_color {c['red']}; @define-color destructive_fg_color #ffffff; @define-color destructive_color {c['red']};
-@define-color success_color {c['green']}; @define-color warning_color {c['yellow']}; @define-color error_color {c['red']};
-@define-color window_bg_color {c['bg']}; @define-color window_fg_color {c['fg']};
-@define-color view_bg_color {view}; @define-color view_fg_color {c['fg']};
-@define-color headerbar_bg_color {c['surface']}; @define-color headerbar_fg_color {c['fg']}; @define-color headerbar_border_color {c['border']};
-@define-color headerbar_backdrop_color {c['bg']}; @define-color headerbar_shade_color {shade}; @define-color headerbar_darker_shade_color {shade};
-@define-color card_bg_color {_rgba(c['fg'], 0.07)}; @define-color card_fg_color {c['fg']}; @define-color card_shade_color {shade};
-@define-color dialog_bg_color {c['surface']}; @define-color dialog_fg_color {c['fg']};
-@define-color popover_bg_color {c['surface']}; @define-color popover_fg_color {c['fg']}; @define-color popover_shade_color {shade};
-@define-color sidebar_bg_color {c['surface']}; @define-color sidebar_fg_color {c['fg']}; @define-color sidebar_backdrop_color {c['bg']}; @define-color sidebar_shade_color {shade}; @define-color sidebar_border_color {c['border']};
-@define-color secondary_sidebar_bg_color {c['bg']}; @define-color secondary_sidebar_fg_color {c['fg']}; @define-color secondary_sidebar_backdrop_color {c['bg']}; @define-color secondary_sidebar_shade_color {shade}; @define-color secondary_sidebar_border_color {c['border']};
-@define-color thumbnail_bg_color {c['surface']}; @define-color thumbnail_fg_color {c['fg']};
-@define-color shade_color {shade}; @define-color scrollbar_outline_color rgba(0,0,0,0.5);
-"""
-    for t in (GTK4, GTK3):
-        t.parent.mkdir(parents=True, exist_ok=True)
-        t.write_text(css)
+    border = _mix(c["bg"], c["fg"], 0.18)
+    pairs = [("accent_bg_color", c["acc"]), ("accent_fg_color", c["acc_fg"]), ("accent_color", c["acc"]),
+             ("destructive_bg_color", c["red"]), ("destructive_fg_color", "#ffffff"), ("destructive_color", c["red"]),
+             ("success_bg_color", c["green"]), ("success_fg_color", "#000000" if _lum(c["green"]) > 0.6 else "#ffffff"), ("success_color", c["green"]),
+             ("warning_bg_color", c["yellow"]), ("warning_fg_color", "#000000"), ("warning_color", c["yellow"]),
+             ("error_bg_color", c["red"]), ("error_fg_color", "#ffffff"), ("error_color", c["red"]),
+             ("window_bg_color", c["bg"]), ("window_fg_color", c["fg"]), ("view_bg_color", view), ("view_fg_color", c["fg"]),
+             ("headerbar_bg_color", c["surface"]), ("headerbar_fg_color", c["fg"]), ("headerbar_border_color", c["border"]),
+             ("headerbar_backdrop_color", c["bg"]), ("headerbar_shade_color", shade), ("headerbar_darker_shade_color", shade),
+             ("card_bg_color", _rgba(c["fg"], 0.07)), ("card_fg_color", c["fg"]), ("card_shade_color", shade),
+             ("dialog_bg_color", c["surface"]), ("dialog_fg_color", c["fg"]),
+             ("popover_bg_color", c["surface"]), ("popover_fg_color", c["fg"]), ("popover_shade_color", shade),
+             ("sidebar_bg_color", c["surface"]), ("sidebar_fg_color", c["fg"]), ("sidebar_backdrop_color", c["bg"]),
+             ("sidebar_shade_color", shade), ("sidebar_border_color", c["border"]),
+             ("secondary_sidebar_bg_color", c["bg"]), ("secondary_sidebar_fg_color", c["fg"]), ("secondary_sidebar_backdrop_color", c["bg"]),
+             ("secondary_sidebar_shade_color", shade), ("secondary_sidebar_border_color", c["border"]),
+             ("thumbnail_bg_color", c["surface"]), ("thumbnail_fg_color", c["fg"]),
+             ("overview_bg_color", c["bg"]), ("overview_fg_color", c["fg"]),
+             ("active_toggle_bg_color", c["surface2"]), ("active_toggle_fg_color", c["fg"]),
+             ("shade_color", shade), ("scrollbar_outline_color", "rgba(0,0,0,0.5)")]
+    head = f"/* theme: {name} — libadwaita colors generated by {APP} ({CREDIT}) — {MANAGED} */\n"
+    legacy = "".join(f"@define-color {k} {v};\n" for k, v in pairs)
+    variables = ":root {\n" + "".join(f"  --{k.replace('_', '-')}: {v};\n" for k, v in pairs) + "}\n"
+    gtk3 = "".join(f"@define-color {k} {v};\n" for k, v in (
+        ("theme_bg_color", c["bg"]), ("theme_fg_color", c["fg"]), ("theme_base_color", view), ("theme_text_color", c["fg"]),
+        ("theme_selected_bg_color", c["acc"]), ("theme_selected_fg_color", c["acc_fg"]), ("theme_unfocused_bg_color", c["bg"]),
+        ("theme_unfocused_fg_color", c["fg"]), ("theme_unfocused_base_color", view), ("theme_unfocused_text_color", c["fg"]),
+        ("insensitive_bg_color", c["surface"]), ("insensitive_fg_color", _mix(c["fg"], c["bg"], 0.45)), ("borders", border),
+        ("unfocused_borders", border), ("content_view_bg", view), ("placeholder_text_color", _mix(c["fg"], c["bg"], 0.4))))
+    GTK4.parent.mkdir(parents=True, exist_ok=True)
+    GTK4.write_text(head + legacy + variables)
+    GTK3.parent.mkdir(parents=True, exist_ok=True)
+    GTK3.write_text(head + legacy + gtk3)
     return True
 
 
@@ -1906,6 +1974,7 @@ def apply(name, wall="first", quiet=False):
         sch = nvim_scheme(d)
     m = "light" if light else "dark"
     gen = lines or GRAPHITE_LINES          # the palette every generated surface is derived from
+    knobs = shell_knobs(d, m)
     r = {}
 
     # desktop
@@ -1924,8 +1993,15 @@ def apply(name, wall="first", quiet=False):
         gset("org.gnome.desktop.screensaver", "primary-color", pb)
         r["accent"] = acc or "-"
     if T["shell"]:
-        shell_apply(name, gen, decl_acc, m)
+        shell_apply(name, gen, decl_acc, m, knobs)
         r["shell"] = "generated" + (" · dock" if dock_apply(scheme_from(gen, decl_acc, m)) else "")
+    if T.get("font", True):
+        if knobs["font"] == "mono" and mono_font_installed():
+            gset("org.gnome.desktop.interface", "font-name", f"'{MONO_FONT} 10'")
+            r["font"] = "mono"
+        else:
+            greset("org.gnome.desktop.interface", "font-name")
+            r["font"] = "sans"
     if T["gtk"]:
         shipped = (not graphite) and (d / "gtk.css").exists()
         if graphite:
@@ -1984,7 +2060,7 @@ def apply(name, wall="first", quiet=False):
         return
     off = [n for n, _, _ in TARGETS if not T[n]]
     line = lambda keys: " · ".join(f"{k} {r[k]}" for k in keys if k in r) or "-"
-    rows = [("desktop", line(("wallpaper", "shell", "gtk", "icons", "cursor"))),
+    rows = [("desktop", line(("wallpaper", "shell", "gtk", "icons", "cursor", "font"))),
             ("terminals", line(("ghostty", "alacritty", "kitty", "foot", "tmux"))),
             ("editors", line(("nvim", "btop", "vscode"))),
             ("browser", r.get("browser", "-")),
@@ -2435,7 +2511,7 @@ def cmd_uninstall(purge=False):
     editors_restore()
     gtk_clear()
     icons_clear()
-    for key in ("gtk-theme", "icon-theme", "cursor-theme"):
+    for key in ("gtk-theme", "icon-theme", "cursor-theme", "font-name"):
         greset("org.gnome.desktop.interface", key)
     greset("org.gnome.desktop.background", "primary-color")
     greset("org.gnome.desktop.screensaver", "primary-color")

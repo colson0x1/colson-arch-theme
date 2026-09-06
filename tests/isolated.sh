@@ -70,6 +70,8 @@ EOF
 printf '{ "name": "Catppuccin Mocha", "extension": "catppuccin.catppuccin-vsc" }\n' > "$B/mocha/vscode.json"
 printf 'Yaru-blue\n' > "$B/mocha/icons.theme"
 printf 'return { colorscheme = "catppuccin-mocha" }\n' > "$B/mocha/neovim.lua"
+printf 'font = "mono"\nradius = 6\nglass = 0.9\ncoords = "36.1699° N · 115.1398° W"\n' > "$B/mocha/gnome.toml"
+stub fc-list 'echo "JetBrainsMono Nerd Font"' 
 printf 'x' > "$B/mocha/backgrounds/1.jpg"
 sed 's/#1e1e2e/#eff1f5/; s/#cdd6f4/#4c4f69/; s/accent = "#89b4fa"/accent = "#1e66f5"\nmode = "light"/' "$B/mocha/colors.toml" > "$B/latte/colors.toml"
 printf 'x' > "$B/latte/backgrounds/1.jpg"
@@ -147,8 +149,11 @@ for sel in ("#overviewGroup { background-color: #1e1e2e; }", ".overview-tile:hov
 for needle in ("org.gnome.shell.extensions.dash-to-dock background-color '#1e1e2e'", "org.gnome.shell.extensions.dash-to-dock custom-theme-running-dots-color '#89b4fa'",
                "org.gnome.shell.extensions.user-theme name theme-mocha"):
     assert needle in log, needle
-gtk = (cfg / "gtk-4.0/gtk.css").read_text()
-assert "@define-color accent_bg_color #89b4fa" in gtk and "@define-color window_bg_color #1e1e2e" in gtk and gtk == (cfg / "gtk-3.0/gtk.css").read_text()
+gtk = (cfg / "gtk-4.0/gtk.css").read_text(); gtk3 = (cfg / "gtk-3.0/gtk.css").read_text()
+assert "@define-color accent_bg_color #89b4fa" in gtk and ":root {" in gtk and "--window-bg-color: #1e1e2e;" in gtk and "--accent-bg-color: #89b4fa;" in gtk
+assert "@define-color theme_bg_color #1e1e2e" in gtk3 and "@define-color theme_selected_bg_color #89b4fa" in gtk3
+assert 'stage { font-family: "JetBrainsMono Nerd Font"' in css and "border-radius: 6px" in css, "gnome.toml knobs must reach the shell sheet"
+assert "font-name 'JetBrainsMono Nerd Font 10'" in log or "reset org.gnome.desktop.interface font-name" in log
 hook = (cfg / "colson-arch-theme/active-nvim.lua").read_text()
 assert 'local scheme, mode = "catppuccin-mocha", "dark"' in hook
 rep = (F / "mocha.log").read_text()
@@ -164,6 +169,7 @@ for needle in ("color-scheme default", "gtk-theme adw-gtk3", "cursor-theme Bibat
     assert needle in log, needle
 assert "gtk-theme adw-gtk3-dark" not in log
 assert 'local scheme, mode = nil, "light"' in (F / ".config/colson-arch-theme/active-nvim.lua").read_text()
+assert "reset org.gnome.desktop.interface font-name" in log, "sans theme must restore the default font"
 overlays = sorted(p.name for p in (F / ".local/share/icons").glob("colson-arch-theme-papirus-*"))
 assert len(overlays) == 1 and not overlays[0].endswith("-dark"), overlays
 print("latte: light mode flips gtk3, cursor, color-scheme; one light overlay replaces the dark one — OK")
