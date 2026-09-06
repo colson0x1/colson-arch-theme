@@ -571,7 +571,7 @@ These are the laws this project is engineered around — the reason it can live 
 
 ```shell
 npm update -g colson-arch-theme       # npm path
-theme update                          # git pull every theme in the library
+theme update                          # git pull every theme in the library — parallel, never prompts, names what is unavailable
 theme doctor                          # verify the whole stack is green
 ```
 

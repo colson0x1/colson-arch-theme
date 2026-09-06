@@ -2570,14 +2570,29 @@ def cmd_add(url, name=None):
     credit()
 
 
-def cmd_update():
-    ok = fail = 0
-    for d in sorted(THEMES.iterdir()) if THEMES.exists() else []:
-        if (d / ".git").exists():
-            r = subprocess.run(["git", "-C", str(d), "pull", "--quiet", "--ff-only"], capture_output=True)
-            ok += (r.returncode == 0)
-            fail += (r.returncode != 0)
-    print(f"updated {ok} repos" + (f" · {fail} failed" if fail else ""))
+def cmd_update(jobs=8):
+    """git pull every repository in the library — in parallel, never prompting, each on a clock — and name what failed."""
+    repos = sorted(d for d in THEMES.iterdir() if (d / ".git").exists()) if THEMES.exists() else []
+    if not repos:
+        print("library is empty — run: theme sync")
+        return
+    print(f" {B('update')} {D(str(len(repos)) + ' repositories, ' + str(jobs) + ' parallel')}")
+    if DRY:
+        print(f"  [dry-run] git pull --ff-only in {len(repos)} repositories")
+        return
+
+    def pull(d):
+        try:
+            r = subprocess.run(["git", "-C", str(d), "pull", "--quiet", "--ff-only"], capture_output=True, timeout=120,
+                               env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+            return r.returncode == 0
+        except subprocess.TimeoutExpired:
+            return False
+
+    with ThreadPoolExecutor(max_workers=jobs) as ex:
+        results = dict(zip([d.name for d in repos], ex.map(pull, repos)))
+    failed = [n for n, ok in results.items() if not ok]
+    print(f" {B('done')} {len(repos) - len(failed)}/{len(repos)} updated" + (f" · unavailable: {', '.join(failed)}" if failed else ""))
     credit()
 
 
@@ -3075,7 +3090,7 @@ GROUPS = [
     ("LIBRARY", [
         ("sync [--official]", "Clone the official bundle and every manifest theme (shallow, parallel, no theme code executed). Safe to re-run.", ["theme sync"]),
         ("add <git-url> [name]", "Install any Omarchy theme repo and remember it in your local manifest.", ["theme add https://github.com/bjarneo/omarchy-frost-theme"]),
-        ("update", "git pull every theme.", ["theme update"]),
+        ("update", "git pull every repository in the library — in parallel, never prompting for credentials, each on a clock; unavailable repositories are named.", ["theme update"]),
         ("remove <name>", "Delete a community theme (official ones are protected).", ["theme remove waffle-cat"]),
         ("credits", "Every theme author with their repository — the people this tool stands on.", ["theme credits"]),
     ]),

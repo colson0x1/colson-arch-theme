@@ -312,4 +312,23 @@ out = F / "forge-out"; assert sorted(p.name for p in out.iterdir()) == ["grid.sv
 assert "forge" in (F / "forge.log").read_text() and "8 wallpapers" in (F / "forge.log").read_text()
 print("forge: 8 styles valid SVG in the palette, deterministic, --out honored; collection listed and protected — OK")
 EOF
+
+# ── update: parallel pulls that never prompt; unavailable repositories are named ──
+L="$FAKE/.local/share/colson-arch-theme/themes"
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_TERMINAL_PROMPT=0
+git init -q --bare -b main "$FAKE/origin.git"
+git clone -q "$FAKE/origin.git" "$FAKE/work" 2>/dev/null
+git -C "$FAKE/work" -c user.name=t -c user.email=t@t commit -q --allow-empty -m one && git -C "$FAKE/work" push -q origin HEAD:main
+git clone -q "$FAKE/origin.git" "$L/alive" && git clone -q "$FAKE/origin.git" "$L/gone"
+git -C "$L/gone" remote set-url origin "$FAKE/nowhere.git"
+git -C "$FAKE/work" -c user.name=t -c user.email=t@t commit -q --allow-empty -m two && git -C "$FAKE/work" push -q origin HEAD:main
+"$T" update --plain > "$FAKE/update.log"
+python3 - <<'EOF'
+import os, pathlib, subprocess
+F = pathlib.Path(os.environ["FAKE"]); rep = (F / "update.log").read_text()
+assert "2 repositories, 8 parallel" in rep and "1/2 updated" in rep and "unavailable: gone" in rep, rep
+n = subprocess.run(["git", "-C", str(F / ".local/share/colson-arch-theme/themes/alive"), "rev-list", "--count", "HEAD"], capture_output=True, text=True).stdout.strip()
+assert n == "2", n
+print("update: parallel pulls, dead remote named, nothing prompted — OK")
+EOF
 echo "isolated suite: all green"
