@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-09-06
+
+The tmux status line follows the theme, and your own is one command away.
+
+### Added
+- **`theme tmux [mine|theme|toggle|key <key|off>]`.** `mine` brings your own status line back this instant — the fragment steps aside, every option it set is unset, your `tmux.conf` is re-sourced — and the next theme switch brings the theme's back; `theme` re-applies the active theme's; `toggle` flips, bound to prefix T unless that key is already yours (`key` moves or removes the binding); bare `theme tmux` shows which one is on screen, the hook, the server and the key.
+- The theme's status line is a full design in the palette: window tabs with the current one as an accent block, `PREFIX` and `ZOOM` state, the running command, session, clock and date; pane borders, messages, copy-mode matches, popups and menus follow. Every `#(…)` command segment of your own status line — tmux-continuum's autosave hook, online-status, a battery script — is kept in front of it, so plugins keep running under the theme.
+
+### Changed
+- tmux follows the theme by default (it was opt-in). Nothing about your own status line is lost: `theme tmux mine`, `theme graphite` and `theme target off tmux` all restore it live, and `theme uninstall` leaves tmux exactly as it found it.
+- A theme switch wires the tmux hook when it is missing, so an upgrade needs no second `theme install`. `theme target on|off tmux` takes effect at once.
+- Shell completions know every command, including `tmux`, `forge`, `activate`, `extensions`, `target` and `import`.
+
 ## [1.2.0] — 2026-09-06
 
 The forge and the Colson pack.

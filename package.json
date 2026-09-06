@@ -1,6 +1,6 @@
 {
   "name": "colson-arch-theme",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Omarchy-grade theming for GNOME on Arch Linux and any GNOME distro, live: 143 themes incl. the original Colson pack, wallpapers forged from any palette, generated GNOME Shell + GTK theming, icons with accent-colored folders, cursor, Ghostty/Alacritty/Kitty/foot, tmux, Neovim, btop, browser frame and editor theme. Every open terminal and Neovim recolors instantly.",
   "bin": {
     "theme": "bin/theme",
