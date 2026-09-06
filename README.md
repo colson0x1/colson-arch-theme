@@ -1,7 +1,7 @@
 <div align="center">
 <h1>Colson Arch Theme (colson-arch-theme npm) 🎨</h1>
 <h2>Omarchy-grade Theming for GNOME on Arch Linux — by COLSON! 🚀</h2>
-<h3>133 Omarchy themes · 660 wallpapers · one command themes the ENTIRE OS</h3>
+<h3>142 themes · 133 from Omarchy + the original Colson pack · wallpapers forged from any palette · one command themes the ENTIRE OS</h3>
 <h3>GNOME Shell (generated) · GTK apps · Icons & Cursor · Ghostty / Alacritty / Kitty / foot · tmux · Neovim · btop · Browser · Editors</h3>
 <h2>⚡ LIVE — every open terminal, every Neovim, tmux and the browser frame turn the instant you switch ⚡</h2>
 <h2>🎯 Live-preview picker · Wallpaper rotation · Day/Night scheduling · True-black Graphite base 🔥</h2>
@@ -88,6 +88,8 @@ Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -s
 - [🖼️ Wallpaper Rotation](#wallpaper-rotation)
 - [🧩 The GNOME Layer](#the-gnome-layer)
 - [➕ Bring Any Omarchy Theme](#bring-any-omarchy-theme)
+- [🧬 The Colson Pack](#the-colson-pack)
+- [🔨 Forge — Wallpapers From the Palette](#forge)
 - [🤖 Scripting & Automation](#scripting-and-automation)
 - [🏗️ Architecture](#architecture)
 - [🛡️ Built for Hand-Tuned Systems](#built-for-hand-tuned-systems)
@@ -108,7 +110,8 @@ This project fixes that, and goes further than a color swap:
 
 | | Omarchy (Hyprland) | colson-arch-theme (GNOME) |
 |---|---|---|
-| Theme catalog | 133 official + community | **the same 133 — synced from the source repos** |
+| Theme catalog | 133 official + community | **the same 133 — synced from the source repos — plus nine original Colson pack themes** |
+| Wallpapers | the photos each theme ships | those, **plus eight engineering styles forged from any theme's palette**: topology, rack, phosphor, circuit, spectrum, grid, contour, lamport |
 | Desktop shell | Waybar / Walker / Mako | **GNOME Shell theme generated per palette** |
 | Apps | GTK via theme `gtk.css` | **shipped `gtk.css` OR a generated libadwaita sheet — 133/133 coverage** |
 | Terminals | Alacritty / Ghostty / Kitty | Ghostty · Alacritty · Kitty · foot (whitelisted color keys only) |
@@ -130,6 +133,8 @@ This project fixes that, and goes further than a color swap:
 - 📁 **Icons that follow the accent** — the declared Yaru variant, or Papirus with every folder recolored to the accent through a user-level overlay; Bibata cursor by light/dark
 - 🌐 **Browser and editor** — Chromium-family frame color while the browser runs; VS Code / Cursor / VSCodium theme when its extension is already installed, restored by Graphite
 - 🎚️ **Targets** — `theme targets` lists what a switch may touch; turn any layer off, or tmux on
+- 🔨 **Forge** — `theme forge` renders original wallpapers from any theme's palette in eight engineering styles, deterministic and offline, 4K PNG
+- 🧬 **The Colson pack** — nine original themes: hacker culture, hyperscale, consensus, boardroom, Bay fog, golden hour, Cupertino light, red team
 - 🧠 **Generated, not hand-written** — every theme gets a GNOME Shell stylesheet and a libadwaita color sheet derived from its palette; coverage is total
 - 🖤 **Graphite** — true-black monochrome base for the entire OS, always one command away
 - 🔍 **Live-preview picker** — fzf browser with a full palette card, sample text in the theme's own colors, <kbd>Enter</kbd> applies
@@ -159,6 +164,7 @@ This project fixes that, and goes further than a color swap:
 | **glib2** (`gsettings`) | ships with every GNOME install | ✅ |
 | **Node.js ≥ 18** | the npm install path only | npm path |
 | **fzf** | `theme pick`, the live-preview picker | optional |
+| **librsvg** (`rsvg-convert`) | renders forged wallpapers to 4K PNG; without it GNOME uses the SVG directly | optional |
 | **uv** or **pipx** | installs the GNOME extension set (`gnome-extensions-cli`) | optional |
 | **Ghostty · Alacritty · Kitty · foot · tmux · Neovim · btop** | integrations — auto-detected, silently skipped when absent; tmux is opt-in | optional |
 | **Chromium · Chrome · Brave · VS Code · Cursor · VSCodium** | browser frame color and editor theme — auto-detected | optional |
@@ -271,7 +277,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 |---|---|
 | **Browse** | `theme` · `theme list [--plain\|--json]` · `theme pick` · `theme preview <name>` · `theme show <name>` |
 | **Apply** | `theme <name> [random]` · `theme random` · `theme next` · `theme graphite` |
-| **Wallpaper** | `theme wall <name\|random>` · `theme next-wall` · `theme rotate <min\|off>` · `theme schedule set HH:MM=theme …` |
+| **Wallpaper** | `theme wall <name\|random>` · `theme next-wall` · `theme rotate <min\|off>` · `theme schedule set HH:MM=theme …` · `theme forge [name\|all] [--styles …] [--size WxH]` |
 | **Library** | `theme sync [--official]` · `theme add <git-url> [name]` · `theme update` · `theme remove <name>` · `theme credits` |
 | **System** | `theme install [--no-sync] [--no-extensions]` · `theme activate` · `theme extensions [--upstream]` · `theme targets` / `theme target on\|off <name>` · `theme uninstall [--purge]` · `theme icons` · `theme doctor [-v\|--json]` · `theme export` / `theme import <file>` · `theme completions <zsh\|bash\|fish>` |
 | **Info** | `theme current [--json]` · `theme about [--json]` · `theme version` · `theme help [command]` |
@@ -420,6 +426,51 @@ name https://github.com/user/omarchy-name-theme
 
 Verify first with `theme add <url>` and `theme doctor` — the theme must yield a full 16-color palette.
 
+<a id="the-colson-pack"></a>
+## 🧬 The Colson Pack
+
+Omarchy's catalog is someone else's taste. These nine are mine, shipped as their own bundle collection at [colson0x1/colson-theme-pack](https://github.com/colson0x1/colson-theme-pack) and part of the default library. Every one is a complete bundle: a 16-color palette, an icon variant, a browser frame color, an editor theme where one fits, and four wallpapers forged from the palette itself — no stock imagery anywhere.
+
+| Theme | Mode | Accent | The room |
+|---|---|---|---|
+| `phosphor` | dark | `#3DFF8A` | DEF CON after midnight — true black, P1-phosphor green, a cluster log that never stops scrolling |
+| `amber` | dark | `#FFB000` | the amber CRT in the machine room — warm monochrome, one glowing rail |
+| `hyperscale` | dark | `#34C6FF` | billions of requests — data-center navy, status-LED cyan, rack rows and replication rings |
+| `quorum` | dark | `#E0B45A` | consensus — slate and teal with a gold quorum accent, vector clocks and hash rings |
+| `platinum` | dark | `#D9C8A9` | the boardroom — near-black, warm whites, one champagne line |
+| `fog` | dark | `#8FB3C9` | Bay Area, 6 a.m. — cool grey-blue, soft contours, the sun behind the marine layer |
+| `golden` | dark | `#FF9F43` | Palo Alto golden hour — warm dark, sunset orange, the last commit before dinner |
+| `cupertino` | light | `#0A6CFF` | aluminum and daylight — graphite type, system blue, the design studio |
+| `zeroday` | dark | `#FF2D55` | red team — black and crimson, glowing traces, a waterfall with too many carriers |
+
+```shell
+theme hyperscale        # or: theme pick — the pack has its own group
+```
+
+<a id="forge"></a>
+## 🔨 Forge — Wallpapers From the Palette
+
+Any theme, not only the pack. `theme forge` takes a theme's palette and renders original wallpapers in eight styles, deterministic per theme and style, offline, as resolution-independent SVG rendered to 4K PNG when `rsvg-convert` is installed. They join that theme's wallpaper set through an overlay under `_forge/`, so a third-party bundle is never written to and `theme wall <name>` draws from both.
+
+| Style | What it draws |
+|---|---|
+| `topology` | regions of services, replication paths with packets in flight, a consistent-hashing ring with vnodes and rf=3 arcs |
+| `rack` | a 42U data-center row — eight racks, units, cable trays, status LEDs with the accent lit here and there |
+| `phosphor` | a scrolling cluster log on a scan-lined CRT: raft terms, ISR changes, p99s, key rotations, your username at the prompt |
+| `circuit` | PCB traces routed Manhattan-style around ICs, vias, silkscreen labels, glowing power rails |
+| `spectrum` | an SDR view — spectrum trace, carriers, a waterfall with dropouts and bursts |
+| `grid` | golden-ratio minimalism — a fine grid, one accent rule, corner marks, coordinates |
+| `contour` | terrain contours from a synthetic heightfield under a low sun — Bay fog |
+| `lamport` | happens-before across six processes, vector clocks, a consistent cut |
+
+```shell
+theme forge                                   # the active theme, all eight styles, 3840×2160 PNG
+theme forge fog --styles contour,grid         # two styles for one theme
+theme forge phosphor --seed 7                 # a different variation of the same palette
+theme forge all                               # SVG for every theme in the library
+theme forge void --out ~/Pictures/void        # render somewhere else entirely
+```
+
 <a id="scripting-and-automation"></a>
 ## 🤖 Scripting & Automation
 
@@ -455,6 +506,7 @@ theme <name>                                  every step gated by `theme targets
   ├─ cursor_apply()      Bibata by mode
   ├─ fragments           ghostty · alacritty · kitty · foot · tmux (opt-in)
   ├─ nvim_hook_write()   ~/.config/colson-arch-theme/active-nvim.lua
+  ├─ forge_render()      palette → SVG (8 styles) → rsvg-convert → 4K PNG, into _forge/<name>/backgrounds (theme forge)
   ├─ browsers_apply()    --set-theme-color to running Chromium-family browsers
   ├─ editors_apply()     workbench.colorTheme where the extension is installed
   ├─ state               ~/.config/colson-arch-theme/active
