@@ -37,7 +37,7 @@ Log out and back in **once** (GNOME only discovers new extensions at login), the
 theme pick
 ```
 
-That's it. 🎉 Type to filter 133 themes with a live palette preview; <kbd>Enter</kbd> applies everything — GNOME Shell, GTK apps, wallpaper, accent, Ghostty, Neovim, btop, icons.
+That's it. 🎉 Type to filter 142 themes with a live palette preview; <kbd>Enter</kbd> applies everything — GNOME Shell, GTK apps, wallpaper, accent, Ghostty, Neovim, btop, icons.
 
 Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -si` — see [Installation](#installation).
 
@@ -48,14 +48,18 @@ Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -s
 <!-- ![colson arch theme](https://i.imgur.com/XXXXXXX.png) -->
 
 ```
- THEME SYSTEM   active moodpeak   · 133 themes · 660 wallpapers   ·  by Colson (@colson0x1)
+ THEME SYSTEM   active hyperscale   · 142 themes · 696 wallpapers   ·  by Colson (@colson0x1)
 
  OFFICIAL (22)
    catppuccin             ████████████████   3w  dark   catppuccin
    tokyo-night            ████████████████   4w  dark   tokyonight-night
    vantablack             ████████████████   2w  dark   -
+ COLSON PACK (9)
+ ▸ hyperscale             ████████████████   4w  dark   tokyonight
+   phosphor               ████████████████   4w  dark   -
+   cupertino              ████████████████   4w  light  github_light
  COMMUNITY (111)
- ▸ moodpeak               ████████████████   5w  dark   aether
+   moodpeak               ████████████████   5w  dark   aether
    synthwave84            ████████████████   6w  dark   synthwave84
    futurism               ████████████████   4w  dark   -
 ```
@@ -565,7 +569,7 @@ Then drop the binary the way it came in: `npm uninstall -g colson-arch-theme` on
 <a id="troubleshooting"></a>
 ## 🩺 Troubleshooting
 
-`theme doctor -v` first — it reports the distro, GNOME version, every hook, every extension, both timers, and palette coverage for all 133 themes. Then:
+`theme doctor -v` first — it reports the distro, GNOME version, every hook, every extension, both timers, and palette coverage for all 142 themes. Then:
 
 | Symptom | Cause · Fix |
 |---|---|
