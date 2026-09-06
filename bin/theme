@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import colorsys
 import json
+import math
 import os
 import pathlib
 import random
@@ -29,6 +30,7 @@ import subprocess
 import sys
 import textwrap
 import tomllib
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 
 # ─────────────────────────────── identity ────────────────────────────────────
@@ -47,6 +49,10 @@ XDG_CONFIG = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
 DATA = XDG_DATA / APP
 THEMES = DATA / "themes"
 OFFICIAL = THEMES / "_omarchy" / "themes"
+PACK_NAME = "colson"
+PACK_URL = "https://github.com/colson0x1/colson-theme-pack"
+PACK = THEMES / f"_{PACK_NAME}" / "themes"
+FORGE = THEMES / "_forge"
 STATE = XDG_CONFIG / APP
 GHOSTTY_DIR = XDG_CONFIG / "ghostty"
 GHOSTTY_CONFIG = GHOSTTY_DIR / "config"
@@ -75,7 +81,7 @@ RUNTIME = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid(
 SCRIPT = pathlib.Path(os.path.realpath(__file__))
 MANAGED = "managed by `theme`"
 
-IMG = (".jpg", ".jpeg", ".png", ".webp")
+IMG = (".jpg", ".jpeg", ".png", ".webp", ".svg")
 WHITELIST = ("background", "foreground", "cursor-color", "cursor-text",
              "selection-background", "selection-foreground", "palette")
 GRAPHITE_LINES = [
@@ -192,12 +198,22 @@ def gget(schema, key, schemadir=None):
 
 
 # ─────────────────────────────── themes ──────────────────────────────────────
+def collections():
+    """Bundle collections: the official Omarchy repo, the Colson pack, anything else cloned as _<name>/themes/*."""
+    out = [c for c in (OFFICIAL, PACK) if c.exists()]
+    if THEMES.exists():
+        for c in sorted(THEMES.glob("_*/themes")):
+            if c.is_dir() and c not in out:
+                out.append(c)
+    return out
+
+
 def themes():
     d = {}
-    if OFFICIAL.exists():
-        for p in sorted(OFFICIAL.iterdir()):
-            if p.is_dir():
-                d[p.name] = p
+    for coll in collections():
+        for p in sorted(coll.iterdir()):
+            if p.is_dir() and not p.name.startswith("."):
+                d.setdefault(p.name, p)
     if THEMES.exists():
         for p in sorted(THEMES.iterdir()):
             if p.is_dir() and not p.name.startswith("_"):
@@ -209,11 +225,21 @@ def is_official(p):
     return str(p).startswith(str(OFFICIAL))
 
 
+def source_of(p):
+    if str(p).startswith(str(OFFICIAL)):
+        return "official"
+    if str(p).startswith(str(PACK)):
+        return PACK_NAME
+    return "community"
+
+
 def backgrounds(dirp):
-    b = dirp / "backgrounds"
-    if not b.exists():
-        return []
-    return sorted(f for f in b.rglob("*") if f.is_file() and f.suffix.lower() in IMG)
+    """The bundle's own wallpapers plus anything `theme forge` generated for it — third-party bundles are never written to."""
+    out = []
+    for b in (dirp / "backgrounds", FORGE / dirp.name / "backgrounds"):
+        if b.exists():
+            out += sorted(f for f in b.rglob("*") if f.is_file() and f.suffix.lower() in IMG)
+    return out
 
 
 def active_name():
@@ -1063,6 +1089,445 @@ def extension_states():
     return out
 
 
+# ─────────────────────────────── forge: wallpapers from a palette ────────────
+FORGE_STYLES = ("topology", "rack", "phosphor", "circuit", "spectrum", "grid", "contour", "lamport")
+FORGE_FONT = "JetBrainsMono Nerd Font, JetBrains Mono, DejaVu Sans Mono, monospace"
+LOG_LINES = (
+    "kafka · broker-{n2}: ISR for events-{n1} p{n2} shrank to [{n1},{n2}] · leader {n1}",
+    "raft · term {n3}: node-{n1} granted vote to node-{n2} · log index {n4}",
+    "grpc · /match.Race/Stream p50={ms1}ms p99={ms2}ms · {k}k rps · 0 errors",
+    "sched · rebalanced {n2} shards across {n1} nodes in {ms2}ms",
+    "tls · rotated cert cn=edge-{n2}.internal · valid 90d · ocsp stapled",
+    "gc · pause {ms1}ms · heap {n1}GiB → {n1}GiB · promoted 12MiB",
+    "envoy · cluster {svc} · {n2}/{n2} healthy · outlier ejections 0",
+    "k8s · node-{n2} Ready · pods {n2}/110 · pressure none",
+    "cache · hit-ratio {pct}% · evictions {n1}/s · rtt 0.{n2}ms",
+    "consensus · commit index {n4} · applied {n4} · followers in sync",
+    "kernel · bpf: attached xdp on eth{n1} · 14.2M pps · 0 drops",
+    "edge · pop {pop}: {k}k rps · cache 97% · origin shield ok",
+    "wal · fsync {ms1}ms · segments 3 · checkpoint ok",
+    "auth · key rotation ok · kid=…{hex} · 0 rejected",
+    "mesh · mtls handshake {ms1}ms · spiffe id verified",
+    "cdc · lag 0ms · 1.4M events/s · exactly-once",
+)
+SVC = ("payments", "ledger", "matchmaking", "presence", "search", "billing", "feed")
+POPS = ("sfo", "ams", "nrt", "bom", "gru", "fra", "sin")
+
+
+def _num(v):
+    return f"{v:.1f}".rstrip("0").rstrip(".")
+
+
+def _esc(t):
+    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _svg_head(W, H, c, seed, phosphor=False):
+    top = _mix(c["bg"], c["acc"], 0.10)
+    vig_col, vig_a = ("#000000", 0.80 if phosphor else 0.55) if not c["light"] else (c["fg"], 0.10)
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FORGE_FONT}">\n'
+            f'<defs>\n'
+            f' <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="{_num(9 * W / 3840)}"/></filter>\n'
+            f' <radialGradient id="vig" cx="50%" cy="50%" r="72%"><stop offset="0.5" stop-color="{vig_col}" stop-opacity="0"/><stop offset="1" stop-color="{vig_col}" stop-opacity="{vig_a}"/></radialGradient>\n'
+            f' <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{top}"/><stop offset="1" stop-color="{c["bg"]}"/></linearGradient>\n'
+            f' <radialGradient id="sun"><stop offset="0" stop-color="{c["acc"]}" stop-opacity="0.22"/><stop offset="1" stop-color="{c["acc"]}" stop-opacity="0"/></radialGradient>\n'
+            f' <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{c["fg"]}" stop-opacity="0.07"/><stop offset="1" stop-color="{c["fg"]}" stop-opacity="0"/></linearGradient>\n'
+            f'</defs>\n<rect width="100%" height="100%" fill="{c["bg"]}"/>\n')
+
+
+def _svg_tail():
+    return '<rect width="100%" height="100%" fill="url(#vig)"/>\n</svg>\n'
+
+
+def _f_topology(c, rng, W, H, s):
+    fg, acc, o = c["fg"], c["acc"], []
+    regions = (("us-east-1", 260, 380, 1180, 760), ("eu-central-1", 260, 1300, 980, 620), ("ap-south-1", 1520, 1380, 900, 560))
+    leaders = []
+    for label, x, y, w, h in regions:
+        x, y, w, h = x * s, y * s, w * s, h * s
+        o.append(f'<rect x="{_num(x)}" y="{_num(y)}" width="{_num(w)}" height="{_num(h)}" rx="{_num(40 * s)}" fill="{_rgba(fg, 0.02)}" stroke="{_rgba(fg, 0.10)}" stroke-width="{_num(2 * s)}"/>')
+        o.append(f'<text x="{_num(x + 40 * s)}" y="{_num(y + 70 * s)}" font-size="{_num(34 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(4 * s)}">{label}</text>')
+        pts = []
+        for _ in range(rng.randint(6, 9)):
+            for _try in range(60):
+                px, py = x + rng.uniform(80 * s, w - 80 * s), y + rng.uniform(120 * s, h - 80 * s)
+                if all((px - qx) ** 2 + (py - qy) ** 2 > (150 * s) ** 2 for qx, qy in pts):
+                    pts.append((px, py))
+                    break
+        for i, (px, py) in enumerate(pts):
+            for _, j in sorted(((qx - px) ** 2 + (qy - py) ** 2, j) for j, (qx, qy) in enumerate(pts) if j != i)[:2]:
+                qx, qy = pts[j]
+                o.append(f'<line x1="{_num(px)}" y1="{_num(py)}" x2="{_num(qx)}" y2="{_num(qy)}" stroke="{_rgba(fg, 0.16)}" stroke-width="{_num(2 * s)}"/>')
+        lead = rng.randrange(len(pts))
+        for i, (px, py) in enumerate(pts):
+            if i == lead:
+                o.append(f'<circle cx="{_num(px)}" cy="{_num(py)}" r="{_num(28 * s)}" fill="{_rgba(acc, 0.35)}" filter="url(#glow)"/>')
+                o.append(f'<circle cx="{_num(px)}" cy="{_num(py)}" r="{_num(13 * s)}" fill="{acc}"/>')
+            else:
+                o.append(f'<circle cx="{_num(px)}" cy="{_num(py)}" r="{_num(11 * s)}" fill="{c["bg"]}" stroke="{_rgba(fg, 0.55)}" stroke-width="{_num(2.5 * s)}"/>')
+        leaders.append(pts[lead])
+    for i in range(len(leaders)):
+        for j in range(i + 1, len(leaders)):
+            (ax, ay), (bx, by) = leaders[i], leaders[j]
+            mx, my = (ax + bx) / 2 + rng.uniform(-200, 200) * s, (ay + by) / 2 - rng.uniform(150, 350) * s
+            o.append(f'<path d="M{_num(ax)},{_num(ay)} Q{_num(mx)},{_num(my)} {_num(bx)},{_num(by)}" fill="none" stroke="{_rgba(acc, 0.32)}" stroke-width="{_num(2.5 * s)}" stroke-dasharray="{_num(14 * s)} {_num(18 * s)}"/>')
+            for t in (0.25, 0.6):
+                px = (1 - t) ** 2 * ax + 2 * (1 - t) * t * mx + t * t * bx
+                py = (1 - t) ** 2 * ay + 2 * (1 - t) * t * my + t * t * by
+                o.append(f'<circle cx="{_num(px)}" cy="{_num(py)}" r="{_num(6 * s)}" fill="{acc}"/>')
+    cx, cy, R = 2900 * s, 900 * s, 520 * s
+    o.append(f'<circle cx="{_num(cx)}" cy="{_num(cy)}" r="{_num(R)}" fill="none" stroke="{_rgba(fg, 0.14)}" stroke-width="{_num(2 * s)}"/>')
+    o.append(f'<circle cx="{_num(cx)}" cy="{_num(cy)}" r="{_num(R * 0.72)}" fill="none" stroke="{_rgba(fg, 0.06)}" stroke-width="{_num(1.5 * s)}" stroke-dasharray="{_num(6 * s)} {_num(10 * s)}"/>')
+    for k in range(64):
+        a = 2 * math.pi * k / 64
+        r1 = R - (18 if k % 8 else 34) * s
+        o.append(f'<line x1="{_num(cx + r1 * math.cos(a))}" y1="{_num(cy + r1 * math.sin(a))}" x2="{_num(cx + R * math.cos(a))}" y2="{_num(cy + R * math.sin(a))}" stroke="{_rgba(fg, 0.28 if k % 8 == 0 else 0.14)}" stroke-width="{_num(2 * s)}"/>')
+    vn = sorted(rng.uniform(0, 2 * math.pi) for _ in range(9))
+    for i, a in enumerate(vn):
+        o.append(f'<circle cx="{_num(cx + R * math.cos(a))}" cy="{_num(cy + R * math.sin(a))}" r="{_num(10 * s)}" fill="{acc}"/>')
+        b = vn[(i + 2) % len(vn)]
+        sweep = (b - a) % (2 * math.pi)
+        r2 = R * 0.86
+        o.append(f'<path d="M{_num(cx + r2 * math.cos(a))},{_num(cy + r2 * math.sin(a))} A{_num(r2)},{_num(r2)} 0 {1 if sweep > math.pi else 0} 1 {_num(cx + r2 * math.cos(b))},{_num(cy + r2 * math.sin(b))}" fill="none" stroke="{_rgba(acc, 0.18)}" stroke-width="{_num(3 * s)}"/>')
+    o.append(f'<text x="{_num(cx)}" y="{_num(cy + 12 * s)}" text-anchor="middle" font-size="{_num(30 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(6 * s)}">consistent hashing · rf=3</text>')
+    o.append(f'<text x="{_num(cx)}" y="{_num(cy + 58 * s)}" text-anchor="middle" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.22)}">2^64 keyspace · 9 vnodes</text>')
+    for tx, ty, txt in ((300, 300, "p99 2.1 ms · 1.2M rps"), (2640, 1990, "cross-region replication · async"), (300, 2040, "quorum r=2 w=2 n=3")):
+        o.append(f'<text x="{_num(tx * s)}" y="{_num(ty * s)}" font-size="{_num(26 * s)}" fill="{_rgba(fg, 0.25)}" letter-spacing="{_num(3 * s)}">{txt}</text>')
+    return o
+
+
+def _f_rack(c, rng, W, H, s):
+    fg, acc, green, amber, o = c["fg"], c["acc"], c["green"], c["yellow"], []
+    n, rw, rh, gap = 8, 300 * s, 1380 * s, 80 * s
+    total = n * rw + (n - 1) * gap
+    x0, y0 = (W - total) / 2, H * 0.30
+    surface, unit_fill = _mix(c["bg"], fg, 0.04), _mix(c["bg"], fg, 0.07)
+    o.append(f'<rect x="{_num(x0 - 60 * s)}" y="{_num(y0 - 140 * s)}" width="{_num(total + 120 * s)}" height="{_num(20 * s)}" fill="{_rgba(fg, 0.08)}"/>')
+    for i in range(n):
+        x = x0 + i * (rw + gap)
+        o.append(f'<rect x="{_num(x)}" y="{_num(y0)}" width="{_num(rw)}" height="{_num(rh)}" rx="{_num(8 * s)}" fill="{surface}" stroke="{_rgba(fg, 0.16)}" stroke-width="{_num(2 * s)}"/>')
+        u = (rh - 40 * s) / 42
+        for k in range(43):
+            yy = y0 + 20 * s + k * u
+            o.append(f'<line x1="{_num(x + 10 * s)}" y1="{_num(yy)}" x2="{_num(x + 22 * s)}" y2="{_num(yy)}" stroke="{_rgba(fg, 0.10)}" stroke-width="{_num(1.5 * s)}"/>')
+        k = 0
+        while k < 42:
+            hu = min(rng.choice([1, 1, 1, 2, 2, 4]), 42 - k)
+            if rng.random() < 0.18:
+                k += hu
+                continue
+            yy = y0 + 20 * s + k * u
+            o.append(f'<rect x="{_num(x + 34 * s)}" y="{_num(yy + 3 * s)}" width="{_num(rw - 58 * s)}" height="{_num(hu * u - 6 * s)}" rx="{_num(4 * s)}" fill="{unit_fill}" stroke="{_rgba(fg, 0.12)}" stroke-width="{_num(1.5 * s)}"/>')
+            for j in range(rng.randint(2, 6)):
+                lx, ly = x + 50 * s + j * 16 * s, yy + 3 * s + (hu * u - 6 * s) / 2 - 4 * s
+                r = rng.random()
+                col, op = (acc, 0.95) if r < 0.10 else ((amber, 0.6) if r < 0.16 else (green, 0.35 if rng.random() < 0.7 else 0.12))
+                if col == acc:
+                    o.append(f'<rect x="{_num(lx - 6 * s)}" y="{_num(ly - 6 * s)}" width="{_num(20 * s)}" height="{_num(20 * s)}" fill="{acc}" fill-opacity="0.5" filter="url(#glow)"/>')
+                o.append(f'<rect x="{_num(lx)}" y="{_num(ly)}" width="{_num(8 * s)}" height="{_num(8 * s)}" rx="{_num(2 * s)}" fill="{col}" fill-opacity="{op}"/>')
+            o.append(f'<line x1="{_num(x + rw - 70 * s)}" y1="{_num(yy + hu * u / 2)}" x2="{_num(x + rw - 40 * s)}" y2="{_num(yy + hu * u / 2)}" stroke="{_rgba(fg, 0.18)}" stroke-width="{_num(2 * s)}"/>')
+            k += hu
+        cxx = x + rw / 2 + rng.uniform(-60, 60) * s
+        o.append(f'<path d="M{_num(cxx)},{_num(y0)} C{_num(cxx)},{_num(y0 - 70 * s)} {_num(cxx + rng.uniform(-120, 120) * s)},{_num(y0 - 90 * s)} {_num(cxx + rng.uniform(-40, 40) * s)},{_num(y0 - 130 * s)}" fill="none" stroke="{_rgba(acc, 0.35)}" stroke-width="{_num(3 * s)}"/>')
+        o.append(f'<text x="{_num(x + rw / 2)}" y="{_num(y0 + rh + 56 * s)}" text-anchor="middle" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.28)}" letter-spacing="{_num(4 * s)}">R{12 + i:02d}</text>')
+    o.append(f'<rect x="0" y="{_num(y0 + rh)}" width="{W}" height="{_num(H - y0 - rh)}" fill="url(#floor)"/>')
+    o.append(f'<text x="{_num(x0)}" y="{_num(y0 - 200 * s)}" font-size="{_num(30 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(6 * s)}">row 07 · racks R12–R19 · 42U · 2N power · hot aisle →</text>')
+    return o
+
+
+def _f_phosphor(c, rng, W, H, s):
+    fg, acc, o = c["fg"], c["acc"], []
+    o.append(f'<defs><pattern id="scan" width="{W}" height="{_num(6 * s)}" patternUnits="userSpaceOnUse"><rect width="{W}" height="{_num(2 * s)}" fill="{fg}" fill-opacity="{0.045 if not c["light"] else 0.02}"/></pattern></defs>')
+    o.append('<rect width="100%" height="100%" fill="url(#scan)"/>')
+    x, y, lh, fs = 200 * s, 300 * s, 46 * s, 30 * s
+    user = re.sub(r"[^a-z0-9._-]", "", os.environ.get("USER", "ops").lower()) or "ops"
+    head = f"{user}@edge-01 ~ $ tail -f /var/log/cluster/consensus.log"
+    o.append(f'<text x="{_num(x)}" y="{_num(y)}" font-size="{_num(fs)}" fill="{acc}" fill-opacity="0.45" filter="url(#glow)">{_esc(head)}</text>')
+    o.append(f'<text x="{_num(x)}" y="{_num(y)}" font-size="{_num(fs)}" fill="{acc}">{_esc(head)}</text>')
+    n = 36
+    sec, ms = 37, 100
+    for i in range(n):
+        sec += rng.randint(0, 2)
+        ms = (ms + rng.randint(40, 900)) % 1000
+        tpl = rng.choice(LOG_LINES)
+        line = tpl.format(n1=rng.randint(1, 9), n2=rng.randint(10, 99), n3=rng.randint(100, 999), n4=rng.randint(100000, 9000000),
+                          ms1=_num(rng.uniform(0.4, 4.0)), ms2=rng.randint(1, 40), k=rng.randint(120, 980), pct=rng.randint(90, 99),
+                          svc=rng.choice(SVC), pop=rng.choice(POPS), hex=format(rng.randrange(16 ** 6), "06x"))
+        sub, rest = line.split(" · ", 1)
+        fade = 0.18 + 0.42 * (i + 1) / n
+        yy = y + lh * (i + 1.4)
+        o.append(f'<text x="{_num(x)}" y="{_num(yy)}" font-size="{_num(fs)}" fill="{fg}" fill-opacity="{fade:.2f}">'
+                 f'<tspan fill="{_rgba(fg, 0.55)}">13:{sec % 60:02d}:{ms:03d}</tspan>  <tspan fill="{acc}">{_esc(sub)}</tspan> · {_esc(rest)}</text>')
+    yy = y + lh * (n + 2.2)
+    o.append(f'<text x="{_num(x)}" y="{_num(yy)}" font-size="{_num(fs)}" fill="{acc}">{_esc(user + "@edge-01 ~ $ ")}</text>')
+    o.append(f'<rect x="{_num(x + fs * 0.6 * (len(user) + 13))}" y="{_num(yy - fs * 0.85)}" width="{_num(fs * 0.6)}" height="{_num(fs * 1.05)}" fill="{acc}"/>')
+    return o
+
+
+def _f_circuit(c, rng, W, H, s):
+    fg, acc, o = c["fg"], c["acc"], []
+    grid = 60 * s
+    cols, rows = int(W / grid), int(H / grid)
+    used = set()
+    for _ in range(6):
+        w_, h_ = rng.choice([4, 6, 8]), rng.choice([3, 4, 6])
+        gx, gy = rng.randint(4, cols - w_ - 4), rng.randint(3, rows - h_ - 3)
+        x, y = gx * grid, gy * grid
+        o.append(f'<rect x="{_num(x)}" y="{_num(y)}" width="{_num(w_ * grid)}" height="{_num(h_ * grid)}" rx="{_num(6 * s)}" fill="{_mix(c["bg"], fg, 0.05)}" stroke="{_rgba(fg, 0.30)}" stroke-width="{_num(2 * s)}"/>')
+        o.append(f'<circle cx="{_num(x + 14 * s)}" cy="{_num(y + 14 * s)}" r="{_num(5 * s)}" fill="{_rgba(fg, 0.35)}"/>')
+        o.append(f'<text x="{_num(x + w_ * grid / 2)}" y="{_num(y + h_ * grid / 2 + 8 * s)}" text-anchor="middle" font-size="{_num(22 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(3 * s)}">{rng.choice(("U7", "U12", "U3", "FPGA", "MCU", "PHY"))}</text>')
+        for k in range(w_ * 2):
+            px = x + grid / 4 + k * grid / 2
+            for py1, py2 in ((y - 14 * s, y), (y + h_ * grid, y + h_ * grid + 14 * s)):
+                o.append(f'<line x1="{_num(px)}" y1="{_num(py1)}" x2="{_num(px)}" y2="{_num(py2)}" stroke="{_rgba(fg, 0.30)}" stroke-width="{_num(2.5 * s)}"/>')
+        for gxx in range(gx - 1, gx + w_ + 1):
+            for gyy in range(gy - 1, gy + h_ + 1):
+                used.add((gxx, gyy))
+    for _ in range(80):
+        gx, gy = rng.randint(1, cols - 2), rng.randint(1, rows - 2)
+        if (gx, gy) in used:
+            continue
+        pts, d = [(gx, gy)], rng.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
+        for _seg in range(rng.randint(2, 6)):
+            for _step in range(rng.randint(2, 9)):
+                nx, ny = pts[-1][0] + d[0], pts[-1][1] + d[1]
+                if not (1 <= nx < cols - 1 and 1 <= ny < rows - 1) or (nx, ny) in used:
+                    break
+                pts.append((nx, ny))
+                used.add((nx, ny))
+            d = rng.choice([(d[1], d[0]), (-d[1], -d[0])])
+        if len(pts) < 3:
+            continue
+        power = rng.random() < 0.12
+        col, op, wd = (acc, 0.6, 5) if power else (fg, 0.20, 3)
+        dstr = "M" + " L".join(f"{_num(px * grid)},{_num(py * grid)}" for px, py in pts)
+        if power:
+            o.append(f'<path d="{dstr}" fill="none" stroke="{acc}" stroke-opacity="0.35" stroke-width="{_num(14 * s)}" stroke-linejoin="round" filter="url(#glow)"/>')
+        o.append(f'<path d="{dstr}" fill="none" stroke="{col}" stroke-opacity="{op}" stroke-width="{_num(wd * s)}" stroke-linejoin="round" stroke-linecap="round"/>')
+        for px, py in (pts[0], pts[-1]):
+            o.append(f'<circle cx="{_num(px * grid)}" cy="{_num(py * grid)}" r="{_num(9 * s)}" fill="{c["bg"]}" stroke="{col}" stroke-opacity="{min(1.0, op + 0.25)}" stroke-width="{_num(3 * s)}"/>')
+    for _ in range(18):
+        gx, gy = rng.randint(1, cols - 2), rng.randint(1, rows - 2)
+        o.append(f'<text x="{_num(gx * grid + 8 * s)}" y="{_num(gy * grid - 8 * s)}" font-size="{_num(20 * s)}" fill="{_rgba(fg, 0.25)}">{rng.choice(("C12", "R48", "L3", "Q7", "J4 JTAG", "SWD", "XTAL 25.000", "TP9", "D2", "FB1", "GND", "3V3"))}</text>')
+    return o
+
+
+def _f_spectrum(c, rng, W, H, s):
+    fg, acc, o = c["fg"], c["acc"], []
+    x0, x1 = 200 * s, W - 200 * s
+    carriers = sorted(rng.uniform(x0 + 100 * s, x1 - 100 * s) for _ in range(rng.randint(6, 10)))
+    widths = [rng.uniform(14, 70) * s for _ in carriers]
+    ty0, ty1, N, pts = 420 * s, 980 * s, 480, []
+    for i in range(N + 1):
+        x = x0 + (x1 - x0) * i / N
+        v = rng.uniform(0, 0.10)
+        for cxx, w_ in zip(carriers, widths):
+            d = (x - cxx) / w_
+            v += math.exp(-d * d * 2.2) * rng.uniform(0.55, 0.95)
+        pts.append((x, ty1 - min(v, 1.0) * (ty1 - ty0)))
+    poly = " ".join(f"{_num(x)},{_num(y)}" for x, y in pts)
+    o.append(f'<polygon points="{_num(x0)},{_num(ty1)} {poly} {_num(x1)},{_num(ty1)}" fill="{acc}" fill-opacity="0.10"/>')
+    o.append(f'<polyline points="{poly}" fill="none" stroke="{acc}" stroke-width="{_num(2.5 * s)}" stroke-opacity="0.9"/>')
+    for k in range(6):
+        yy = ty0 + (ty1 - ty0) * k / 5
+        o.append(f'<line x1="{_num(x0)}" y1="{_num(yy)}" x2="{_num(x1)}" y2="{_num(yy)}" stroke="{_rgba(fg, 0.10)}" stroke-width="{_num(1.5 * s)}"/>')
+        o.append(f'<text x="{_num(x0 - 24 * s)}" y="{_num(yy + 9 * s)}" text-anchor="end" font-size="{_num(22 * s)}" fill="{_rgba(fg, 0.30)}">{-20 - k * 12} dBm</text>')
+    for k in range(11):
+        xx = x0 + (x1 - x0) * k / 10
+        o.append(f'<line x1="{_num(xx)}" y1="{_num(ty1)}" x2="{_num(xx)}" y2="{_num(ty1 + 16 * s)}" stroke="{_rgba(fg, 0.30)}" stroke-width="{_num(2 * s)}"/>')
+        o.append(f'<text x="{_num(xx)}" y="{_num(ty1 + 50 * s)}" text-anchor="middle" font-size="{_num(22 * s)}" fill="{_rgba(fg, 0.30)}">{2400 + k * 8.3:.1f}</text>')
+    wy0, wy1, rowsN = 1130 * s, H - 180 * s, 110
+    rh = (wy1 - wy0) / rowsN
+    o.append(f'<rect x="{_num(x0)}" y="{_num(wy0)}" width="{_num(x1 - x0)}" height="{_num(wy1 - wy0)}" fill="{_mix(c["bg"], fg, 0.03)}"/>')
+    for r in range(rowsN):
+        yy, fade = wy0 + r * rh, 1 - r / rowsN * 0.7
+        for cxx, w_ in zip(carriers, widths):
+            if rng.random() < 0.12:
+                continue
+            ww = w_ * rng.uniform(0.8, 1.3)
+            o.append(f'<rect x="{_num(cxx + rng.uniform(-w_ * 0.15, w_ * 0.15) - ww / 2)}" y="{_num(yy)}" width="{_num(ww)}" height="{_num(rh + 0.5)}" fill="{acc}" fill-opacity="{min(0.95, rng.uniform(0.35, 0.95) * fade):.2f}"/>')
+        if rng.random() < 0.06:
+            o.append(f'<rect x="{_num(rng.uniform(x0, x1 - 300 * s))}" y="{_num(yy)}" width="{_num(rng.uniform(80, 300) * s)}" height="{_num(rh + 0.5)}" fill="{c["yellow"]}" fill-opacity="{0.35 * fade:.2f}"/>')
+    o.append(f'<text x="{_num(x0)}" y="{_num(330 * s)}" font-size="{_num(30 * s)}" fill="{_rgba(fg, 0.40)}" letter-spacing="{_num(6 * s)}">sdr · 2.400–2.483 GHz · 20 MS/s · fft 4096 · waterfall 110 rows</text>')
+    o.append(f'<text x="{_num(x1)}" y="{_num(330 * s)}" text-anchor="end" font-size="{_num(26 * s)}" fill="{_rgba(acc, 0.7)}">{len(carriers)} carriers</text>')
+    return o
+
+
+def _f_grid(c, rng, W, H, s):
+    fg, acc, o = c["fg"], c["acc"], []
+    minor, major = 120 * s, 480 * s
+    o.append(f'<defs><pattern id="gminor" width="{_num(minor)}" height="{_num(minor)}" patternUnits="userSpaceOnUse"><path d="M{_num(minor)},0 L0,0 0,{_num(minor)}" fill="none" stroke="{fg}" stroke-opacity="0.045" stroke-width="{_num(1.2 * s)}"/></pattern>'
+             f'<pattern id="gmajor" width="{_num(major)}" height="{_num(major)}" patternUnits="userSpaceOnUse"><path d="M{_num(major)},0 L0,0 0,{_num(major)}" fill="none" stroke="{fg}" stroke-opacity="0.09" stroke-width="{_num(1.5 * s)}"/></pattern></defs>')
+    o.append('<rect width="100%" height="100%" fill="url(#gminor)"/><rect width="100%" height="100%" fill="url(#gmajor)"/>')
+    phi = (1 + 5 ** 0.5) / 2
+    gy, gx = H / phi, W - W / phi
+    o.append(f'<line x1="0" y1="{_num(gy)}" x2="{W}" y2="{_num(gy)}" stroke="{acc}" stroke-opacity="0.35" stroke-width="{_num(10 * s)}" filter="url(#glow)"/>')
+    o.append(f'<line x1="0" y1="{_num(gy)}" x2="{W}" y2="{_num(gy)}" stroke="{acc}" stroke-opacity="0.9" stroke-width="{_num(2 * s)}"/>')
+    o.append(f'<line x1="{_num(gx)}" y1="0" x2="{_num(gx)}" y2="{H}" stroke="{fg}" stroke-opacity="0.12" stroke-width="{_num(1.5 * s)}"/>')
+    o.append(f'<circle cx="{_num(gx)}" cy="{_num(gy)}" r="{_num(9 * s)}" fill="{acc}"/>')
+    o.append(f'<circle cx="{_num(gx)}" cy="{_num(gy)}" r="{_num(40 * s)}" fill="none" stroke="{acc}" stroke-opacity="0.35" stroke-width="{_num(1.5 * s)}"/>')
+    for x, y, dx, dy in ((160 * s, 160 * s, 1, 1), (W - 160 * s, 160 * s, -1, 1), (160 * s, H - 160 * s, 1, -1), (W - 160 * s, H - 160 * s, -1, -1)):
+        o.append(f'<path d="M{_num(x)},{_num(y + dy * 60 * s)} L{_num(x)},{_num(y)} L{_num(x + dx * 60 * s)},{_num(y)}" fill="none" stroke="{fg}" stroke-opacity="0.35" stroke-width="{_num(2 * s)}"/>')
+    o.append(f'<text x="{_num(gx + 40 * s)}" y="{_num(gy - 28 * s)}" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(5 * s)}">φ · 37.4419° N · 122.1430° W</text>')
+    o.append(f'<text x="{_num(W - 160 * s)}" y="{_num(H - 190 * s)}" text-anchor="end" font-size="{_num(22 * s)}" fill="{_rgba(fg, 0.25)}" letter-spacing="{_num(6 * s)}">{W}×{H} · 16:9</text>')
+    return o
+
+
+def _f_contour(c, rng, W, H, s):
+    fg, acc, o = c["fg"], c["acc"], []
+    o.append('<rect width="100%" height="100%" fill="url(#sky)"/>')
+    o.append(f'<circle cx="{_num(W * 0.78)}" cy="{_num(H * 0.22)}" r="{_num(H * 0.40)}" fill="url(#sun)"/>')
+    nx, ny = 128, 72
+    waves = [(rng.uniform(0.6, 2.2), rng.uniform(0.6, 2.2), rng.uniform(0, 6.28), rng.uniform(0.5, 1.0)) for _ in range(6)]
+    grid = [[sum(a * math.sin(fx * (i / nx) * 6.28 + p) * math.cos(fy * (j / ny) * 6.28 + p * 0.7) for fx, fy, p, a in waves) for i in range(nx + 1)] for j in range(ny + 1)]
+    lo, hi = min(map(min, grid)), max(map(max, grid))
+    cw, ch = W / nx, H / ny
+    table = {1: ((3, 2),), 2: ((2, 1),), 3: ((3, 1),), 4: ((0, 1),), 5: ((3, 0), (2, 1)), 6: ((0, 2),), 7: ((3, 0),),
+             8: ((3, 0),), 9: ((0, 2),), 10: ((3, 2), (0, 1)), 11: ((0, 1),), 12: ((3, 1),), 13: ((2, 1),), 14: ((3, 2),)}
+    for li in range(14):
+        lev = lo + (hi - lo) * (li + 0.5) / 14
+        segs = []
+        for j in range(ny):
+            for i in range(nx):
+                a, b, cc, d = grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]
+                idx = (a > lev) * 8 + (b > lev) * 4 + (cc > lev) * 2 + (d > lev) * 1
+                if idx in (0, 15):
+                    continue
+                x, y = i * cw, j * ch
+
+                def ip(v1, v2):
+                    return (lev - v1) / (v2 - v1) if v2 != v1 else 0.5
+                edges = ((x + cw * ip(a, b), y), (x + cw, y + ch * ip(b, cc)), (x + cw * ip(d, cc), y + ch), (x, y + ch * ip(a, d)))
+                for e1, e2 in table[idx]:
+                    segs.append(f"M{_num(edges[e1][0])},{_num(edges[e1][1])}L{_num(edges[e2][0])},{_num(edges[e2][1])}")
+        hero = li == 9
+        o.append(f'<path d="{"".join(segs)}" fill="none" stroke="{acc if hero else fg}" stroke-opacity="{0.55 if hero else 0.10 + 0.08 * (li % 2)}" stroke-width="{_num((2.4 if hero else 1.4) * s)}" stroke-linecap="round"/>')
+    o.append(f'<text x="{_num(160 * s)}" y="{_num(H - 190 * s)}" font-size="{_num(24 * s)}" fill="{_rgba(fg, 0.35)}" letter-spacing="{_num(5 * s)}">37.4419° N · 122.1430° W · 14 contours</text>')
+    return o
+
+
+def _f_lamport(c, rng, W, H, s):
+    fg, acc, o = c["fg"], c["acc"], []
+    n, x0, x1 = 6, 300 * s, W - 260 * s
+    ys = [420 * s + i * (H - 840 * s) / (n - 1) for i in range(n)]
+    for i, y in enumerate(ys):
+        o.append(f'<line x1="{_num(x0)}" y1="{_num(y)}" x2="{_num(x1)}" y2="{_num(y)}" stroke="{_rgba(fg, 0.22)}" stroke-width="{_num(2 * s)}"/>')
+        o.append(f'<text x="{_num(x0 - 40 * s)}" y="{_num(y + 10 * s)}" text-anchor="end" font-size="{_num(28 * s)}" fill="{_rgba(fg, 0.45)}">p{i}</text>')
+    clocks, events, msgs = [[0] * n for _ in range(n)], [], []
+    t = x0 + 120 * s
+    while t < x1 - 200 * s:
+        src, dst = rng.randrange(n), rng.randrange(n)
+        clocks[src][src] += 1
+        events.append((src, t, list(clocks[src])))
+        if dst != src and rng.random() < 0.75:
+            recv = t + rng.uniform(140, 320) * s
+            clocks[dst] = [max(a, b) for a, b in zip(clocks[dst], clocks[src])]
+            clocks[dst][dst] += 1
+            events.append((dst, recv, list(clocks[dst])))
+            msgs.append((src, t, dst, recv))
+        t += rng.uniform(90, 200) * s
+    chain = set(rng.sample(range(len(msgs)), k=min(3, len(msgs))))
+    for k, (a, ta, b, tb) in enumerate(msgs):
+        col, op, wd = (acc, 0.9, 3) if k in chain else (fg, 0.28, 2)
+        o.append(f'<line x1="{_num(ta)}" y1="{_num(ys[a])}" x2="{_num(tb)}" y2="{_num(ys[b])}" stroke="{col}" stroke-opacity="{op}" stroke-width="{_num(wd * s)}"/>')
+        ang, L = math.atan2(ys[b] - ys[a], tb - ta), 22 * s
+        for side in (-1, 1):
+            o.append(f'<line x1="{_num(tb)}" y1="{_num(ys[b])}" x2="{_num(tb - L * math.cos(ang + side * 0.5))}" y2="{_num(ys[b] - L * math.sin(ang + side * 0.5))}" stroke="{col}" stroke-opacity="{op}" stroke-width="{_num(wd * s)}"/>')
+    for pi, x, vc in events:
+        o.append(f'<circle cx="{_num(x)}" cy="{_num(ys[pi])}" r="{_num(8 * s)}" fill="{c["bg"]}" stroke="{_rgba(fg, 0.7)}" stroke-width="{_num(2.5 * s)}"/>')
+        if rng.random() < 0.35:
+            o.append(f'<text x="{_num(x)}" y="{_num(ys[pi] - 22 * s)}" text-anchor="middle" font-size="{_num(20 * s)}" fill="{_rgba(fg, 0.30)}">[{",".join(map(str, vc))}]</text>')
+    gst = x0 + (x1 - x0) * 0.64
+    o.append(f'<line x1="{_num(gst)}" y1="{_num(ys[0] - 90 * s)}" x2="{_num(gst)}" y2="{_num(ys[-1] + 90 * s)}" stroke="{acc}" stroke-opacity="0.5" stroke-width="{_num(2 * s)}" stroke-dasharray="{_num(10 * s)} {_num(12 * s)}"/>')
+    o.append(f'<text x="{_num(gst + 16 * s)}" y="{_num(ys[0] - 100 * s)}" font-size="{_num(24 * s)}" fill="{_rgba(acc, 0.7)}" letter-spacing="{_num(4 * s)}">consistent cut</text>')
+    o.append(f'<text x="{_num(x0)}" y="{_num(280 * s)}" font-size="{_num(30 * s)}" fill="{_rgba(fg, 0.40)}" letter-spacing="{_num(6 * s)}">happens-before · vector clocks · {n} processes</text>')
+    return o
+
+
+FORGE_FN = {"topology": _f_topology, "rack": _f_rack, "phosphor": _f_phosphor, "circuit": _f_circuit,
+            "spectrum": _f_spectrum, "grid": _f_grid, "contour": _f_contour, "lamport": _f_lamport}
+
+
+def forge_svg(name, style, lines, decl_acc, mode, size=(3840, 2160), seed=None):
+    """One wallpaper: deterministic for (theme, style) unless a seed is given; every color comes from the palette."""
+    W, H = size
+    c = scheme_from(lines, decl_acc, mode)
+    c["p"] = full_palette(lines)["p"]
+    rng = random.Random(zlib.crc32(f"{name}:{style}".encode()) if seed is None else seed)
+    body = FORGE_FN[style](c, rng, W, H, W / 3840)
+    return _svg_head(W, H, c, rng.randrange(1000), phosphor=(style == "phosphor")) + "\n".join(body) + "\n" + _svg_tail()
+
+
+def forge_render(name, style, lines, decl_acc, mode, out_dir, size=(3840, 2160), png=True, seed=None):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    svg_path = out_dir / f"{style}.svg"
+    svg_path.write_text(forge_svg(name, style, lines, decl_acc, mode, size, seed))
+    if png and shutil.which("rsvg-convert"):
+        png_path = out_dir / f"{style}.png"
+        r = subprocess.run(["rsvg-convert", "-w", str(size[0]), "-h", str(size[1]), "-o", str(png_path), str(svg_path)],
+                           capture_output=True, timeout=600)
+        if r.returncode == 0 and png_path.exists():
+            svg_path.unlink()
+            return png_path
+    return svg_path
+
+
+def cmd_forge(args):
+    """theme forge [name|all] [--styles a,b] [--size WxH] [--out DIR] [--svg] [--png] [--seed N]"""
+    names, styles, size, out, png, seed = [], list(FORGE_STYLES), (3840, 2160), None, None, None
+    it = iter(args)
+    for a in it:
+        if a == "--styles":
+            styles = [x for x in next(it, "").split(",") if x]
+        elif a == "--size":
+            m = re.fullmatch(r"(\d+)x(\d+)", next(it, ""))
+            if not m:
+                sys.exit("usage: --size WxH, e.g. 3840x2160")
+            size = (int(m.group(1)), int(m.group(2)))
+        elif a == "--out":
+            out = pathlib.Path(next(it, "")).expanduser()
+        elif a == "--svg":
+            png = False
+        elif a == "--png":
+            png = True
+        elif a == "--seed":
+            seed = int(next(it, "0"))
+        elif not a.startswith("-"):
+            names.append(a)
+    if not styles:
+        sys.exit(f"usage: --styles a,b   (styles: {', '.join(FORGE_STYLES)})")
+    bad = [x for x in styles if x not in FORGE_STYLES]
+    if bad:
+        sys.exit(f"unknown style: {', '.join(bad)}   (styles: {', '.join(FORGE_STYLES)})")
+    ts = themes()
+    if names == ["all"]:
+        names = list(ts)
+        if png is None:
+            png = False   # 133 × 8 rasters would take an hour; SVG is instant and GNOME renders it
+    if not names:
+        names = [active_name()]
+    if png is None:
+        png = True
+    if out and len(names) > 1:
+        sys.exit("--out takes a single theme")
+    for name in names:
+        if name == "graphite":
+            lines, decl_acc, mode = GRAPHITE_LINES, "#ffffff", "dark"
+        elif name in ts:
+            lines, decl_acc, mode = terminal_colors(ts[name])
+        else:
+            sys.exit(f"unknown theme: {name}   (theme list)")
+        dest = out or (FORGE / name / "backgrounds")
+        if DRY:
+            print(f"  [dry-run] forge {name}: {', '.join(styles)} → {dest} ({size[0]}x{size[1]}, {'png' if png else 'svg'})")
+            continue
+        files = [forge_render(name, st, lines, decl_acc, mode, dest, size, png, seed) for st in styles]
+        kinds = "png" if all(f.suffix == ".png" for f in files) else ("svg" if all(f.suffix == ".svg" for f in files) else "mixed")
+        print(f" {B('forge')} {name:<22} {len(files)} wallpapers  {D(kinds + ' · ' + str(size[0]) + 'x' + str(size[1]))}  → {D(tilde(dest))}")
+    if not DRY:
+        credit()
+
+
 # ─────────────────────────────── extensions: state + upstream builds ─────────
 def shell_major():
     r = subprocess.run(["gnome-shell", "--version"], capture_output=True, text=True)
@@ -1565,26 +2030,31 @@ def cmd_status():
 def cmd_list(plain=False, as_json=False):
     ts = themes()
     off = [n for n, p in ts.items() if is_official(p)]
-    com = [n for n in ts if n not in off]
+    pack = [n for n, p in ts.items() if source_of(p) == PACK_NAME]
+    com = [n for n in ts if n not in off and n not in pack]
     if as_json:
         out = []
         for n, d in ts.items():
             l, acc, mode = terminal_colors(d)
             pal, meta = palette_of(l)
-            out.append(dict(name=n, official=n in off, wallpapers=len(backgrounds(d)), mode=mode or "dark",
+            out.append(dict(name=n, official=n in off, source=source_of(d), wallpapers=len(backgrounds(d)), mode=mode or "dark",
                             accent=acc, background=meta.get("background"), foreground=meta.get("foreground"),
                             palette=[pal.get(i) for i in range(16)], nvim=nvim_scheme(d)))
         print(json.dumps(dict(active=active_name(), themes=out), indent=2))
         return
     if plain:
         print("official:", ", ".join(off))
+        if pack:
+            print(f"{PACK_NAME}:", ", ".join(pack))
         print("community:", ", ".join(com))
         return
     act = active_name()
     walls = sum(len(backgrounds(d)) for d in ts.values())
     print()
     print(f" {B('THEME SYSTEM')}   {D('active')} {B(act)}   {D('·')} {len(ts)} themes {D('·')} {walls} wallpapers   {D('·  ' + CREDIT)}")
-    for title, names in (("OFFICIAL", off), ("COMMUNITY", com)):
+    for title, names in (("OFFICIAL", off), ("COLSON PACK", pack), ("COMMUNITY", com)):
+        if not names:
+            continue
         print()
         print(f" {B(title)} {D('(' + str(len(names)) + ')')}")
         for n in names:
@@ -1774,7 +2244,7 @@ def cmd_update():
 
 def cmd_remove(name):
     d = THEMES / name
-    if not d.exists() or name.startswith("_"):
+    if not d.exists() or name.startswith("_") or any(str(themes().get(name, d)).startswith(str(c)) for c in collections()):
         sys.exit(f"not a removable community theme: {name}")
     shutil.rmtree(d)
     print(f"removed {name}")
@@ -1786,9 +2256,12 @@ def cmd_credits():
     print(f" {rule()}")
     print(f"   {B('Omarchy')}  {D('DHH / Omacom Foundation — the theme format and the official bundle')}  {D('https://omarchy.org')}")
     print(f"   {B(APP)}  {D(CREDIT)}  {D(REPO_URL)}")
+    print(f"   {B('Colson pack')}  {D('original themes and forged wallpapers — ' + CREDIT)}  {D(PACK_URL)}")
     print()
     print(f" {B('COMMUNITY THEMES')}")
     for name, url in manifest_entries():
+        if name.startswith("_"):
+            continue
         m = re.match(r"https://github\.com/([^/]+)/", url)
         author = m.group(1) if m else "-"
         print(f"   {name:<24} {D('@' + author):<22} {D(url)}")
@@ -2252,6 +2725,7 @@ GROUPS = [
         ("next-wall", "Rotate within the active theme (all themes on graphite). The rotation timer calls this.", ["theme next-wall"]),
         ("rotate <minutes|off>", "Set the wallpaper rotation interval, or turn it off.", ["theme rotate 15", "theme rotate off"]),
         ("schedule set HH:MM=theme …", "Automatic day/night themes: the latest slot at or before the current time is applied (checked every 5 min).", ["theme schedule set 07:00=catppuccin-latte 19:00=moodpeak", "theme schedule off"]),
+        ("forge [name|all] [--styles a,b] [--size WxH]", "Generate original wallpapers from a theme's palette — topology, rack, phosphor, circuit, spectrum, grid, contour, lamport — deterministic, offline, 4K PNG when rsvg-convert is installed (SVG otherwise). They join that theme's wallpaper set; third-party bundles are never written to. `all` renders SVG for the whole library.", ["theme forge", "theme forge hyperscale --styles rack,topology", "theme forge all"]),
     ]),
     ("LIBRARY", [
         ("sync [--official]", "Clone the official bundle and every manifest theme (shallow, parallel, no theme code executed). Safe to re-run.", ["theme sync"]),
@@ -2452,6 +2926,8 @@ def main(argv):
         return cmd_rotate(rest[0] if rest else "30")
     if c == "schedule":
         return cmd_schedule(rest)
+    if c == "forge":
+        return cmd_forge(rest)
     if c == "sync":
         return cmd_sync(official_only="--official" in rest)
     if c == "add":

@@ -7,7 +7,7 @@
 # packages. Nothing here can reach the machine it runs on.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-T="$HERE/bin/theme"
+T="$HERE/bin/theme"; export T
 FAKE="$(mktemp -d "${TMPDIR:-/tmp}/colson-arch-theme-test.XXXXXX")"
 cleanup() { python3 -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$FAKE"; }
 trap cleanup EXIT
@@ -198,4 +198,30 @@ print("uninstall: every file back to how it was, overlays gone, settings + dock 
 EOF
 n=$("$T" extensions --plain | wc -l); [ "$n" -eq 9 ] || { echo "extensions --plain: expected 9 rows, got $n"; exit 1; }
 echo "extensions: 9 rows offline — OK"
+# ── collections + forge ───────────────────────────────────────────────────────
+mkdir -p "$FAKE/.local/share/colson-arch-theme/themes/_pack/themes/packone/backgrounds"
+cp "$B/mocha/colors.toml" "$FAKE/.local/share/colson-arch-theme/themes/_pack/themes/packone/colors.toml"
+"$T" list --plain | grep -q "packone" || { echo "collection bundle not listed"; exit 1; }
+"$T" remove packone >/dev/null 2>&1 && { echo "collection bundle must not be removable"; exit 1; }
+"$T" forge mocha --svg --size 960x540 > "$FAKE/forge.log"
+"$T" forge packone --svg --size 960x540 --styles grid,phosphor --out "$FAKE/forge-out" > /dev/null
+python3 - <<'EOF'
+import os, pathlib, re, xml.etree.ElementTree as ET
+F = pathlib.Path(os.environ["FAKE"])
+over = F / ".local/share/colson-arch-theme/themes/_forge/mocha/backgrounds"
+files = sorted(p.name for p in over.iterdir())
+assert files == ["circuit.svg", "contour.svg", "grid.svg", "lamport.svg", "phosphor.svg", "rack.svg", "spectrum.svg", "topology.svg"], files
+for p in over.iterdir():
+    root = ET.fromstring(p.read_text())
+    assert root.tag.endswith("svg") and root.get("viewBox") == "0 0 960 540", p.name
+    txt = p.read_text().lower()
+    assert "#1e1e2e" in txt and "#89b4fa" in txt, p.name          # background and accent come from the palette
+    assert "nan" not in txt and not re.search(r"@[a-z0-9_]+@", txt), p.name
+a = (over / "grid.svg").read_text(); (over / "grid.svg").unlink()
+os.system(f'"{os.environ["T"]}" forge mocha --svg --size 960x540 --styles grid >/dev/null')
+assert (over / "grid.svg").read_text() == a, "forge must be deterministic"
+out = F / "forge-out"; assert sorted(p.name for p in out.iterdir()) == ["grid.svg", "phosphor.svg"]
+assert "forge" in (F / "forge.log").read_text() and "8 wallpapers" in (F / "forge.log").read_text()
+print("forge: 8 styles valid SVG in the palette, deterministic, --out honored; collection listed and protected — OK")
+EOF
 echo "isolated suite: all green"
