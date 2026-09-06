@@ -1,7 +1,7 @@
 <div align="center">
 <h1>Colson Arch Theme (colson-arch-theme npm) 🎨</h1>
 <h2>Omarchy-grade Theming for GNOME on Arch Linux — by COLSON! 🚀</h2>
-<h3>142 themes · 133 from Omarchy + the original Colson pack · wallpapers forged from any palette · one command themes the ENTIRE OS</h3>
+<h3>143 themes · 133 from Omarchy + the original Colson pack · wallpapers forged from any palette · one command themes the ENTIRE OS</h3>
 <h3>GNOME Shell (generated) · GTK apps · Icons & Cursor · Ghostty / Alacritty / Kitty / foot · tmux · Neovim · btop · Browser · Editors</h3>
 <h2>⚡ LIVE — every open terminal, every Neovim, tmux and the browser frame turn the instant you switch ⚡</h2>
 <h2>🎯 Live-preview picker · Wallpaper rotation · Day/Night scheduling · True-black Graphite base 🔥</h2>
@@ -37,7 +37,7 @@ Log out and back in **once** (GNOME only discovers new extensions at login), the
 theme pick
 ```
 
-That's it. 🎉 Type to filter 142 themes with a live palette preview; <kbd>Enter</kbd> applies everything — GNOME Shell, GTK apps, wallpaper, accent, Ghostty, Neovim, btop, icons.
+That's it. 🎉 Type to filter 143 themes with a live palette preview; <kbd>Enter</kbd> applies everything — GNOME Shell, GTK apps, wallpaper, accent, Ghostty, Neovim, btop, icons.
 
 Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -si` — see [Installation](#installation).
 
@@ -48,13 +48,13 @@ Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -s
 <!-- ![colson arch theme](https://i.imgur.com/XXXXXXX.png) -->
 
 ```
- THEME SYSTEM   active hyperscale   · 142 themes · 696 wallpapers   ·  by Colson (@colson0x1)
+ THEME SYSTEM   active hyperscale   · 143 themes · 710 wallpapers   ·  by Colson (@colson0x1)
 
  OFFICIAL (22)
    catppuccin             ████████████████   3w  dark   catppuccin
    tokyo-night            ████████████████   4w  dark   tokyonight-night
    vantablack             ████████████████   2w  dark   -
- COLSON PACK (9)
+ COLSON PACK (10)
  ▸ hyperscale             ████████████████   4w  dark   tokyonight
    phosphor               ████████████████   4w  dark   -
    cupertino              ████████████████   4w  light  github_light
@@ -114,7 +114,7 @@ This project fixes that, and goes further than a color swap:
 
 | | Omarchy (Hyprland) | colson-arch-theme (GNOME) |
 |---|---|---|
-| Theme catalog | 133 official + community | **the same 133 — synced from the source repos — plus nine original Colson pack themes** |
+| Theme catalog | 133 official + community | **the same 133 — synced from the source repos — plus ten original Colson pack themes** |
 | Wallpapers | the photos each theme ships | those, **plus eight engineering styles forged from any theme's palette**: topology, rack, phosphor, circuit, spectrum, grid, contour, lamport |
 | Desktop shell | Waybar / Walker / Mako | **GNOME Shell theme generated per palette** |
 | Apps | GTK via theme `gtk.css` | **shipped `gtk.css` OR a generated libadwaita sheet — 133/133 coverage** |
@@ -138,7 +138,7 @@ This project fixes that, and goes further than a color swap:
 - 🌐 **Browser and editor** — Chromium-family frame color while the browser runs; VS Code / Cursor / VSCodium theme when its extension is already installed, restored by Graphite
 - 🎚️ **Targets** — `theme targets` lists what a switch may touch; turn any layer off, or tmux on
 - 🔨 **Forge** — `theme forge` renders original wallpapers from any theme's palette in eight engineering styles, deterministic and offline, 4K PNG
-- 🧬 **The Colson pack** — nine original themes: hacker culture, hyperscale, consensus, boardroom, Bay fog, golden hour, Cupertino light, red team
+- 🧬 **The Colson pack** — ten original themes: DEF CON's Las Vegas, hacker terminals, hyperscale, consensus, boardroom, Bay fog, golden hour, Cupertino light, red team
 - 🧠 **Generated, not hand-written** — every theme gets a GNOME Shell stylesheet and a libadwaita color sheet derived from its palette; coverage is total
 - 🖤 **Graphite** — true-black monochrome base for the entire OS, always one command away
 - 🔍 **Live-preview picker** — fzf browser with a full palette card, sample text in the theme's own colors, <kbd>Enter</kbd> applies
@@ -297,7 +297,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 |---|---|
 | **Wallpaper** | GNOME `picture-uri` + `picture-uri-dark` + lock screen, zoom-fit |
 | **GNOME Shell** | `~/.themes/theme-<name>/gnome-shell/gnome-shell.css` generated from the palette — top bar, the overview canvas behind the app grid, app tiles, folders and running dots, dash and dash-to-dock, quick settings, menus, calendar, notifications, dialogs, switcher, lock — loaded via User Themes and reloaded on every switch |
-| **GTK apps** | the theme's `gtk.css` when shipped, otherwise a generated libadwaita sheet (`window`, `view`, `headerbar`, `sidebar`, `card`, `popover`, `accent`, `success`, `warning`, `error`) into `gtk-4.0` + `gtk-3.0` · `adw-gtk3` / `adw-gtk3-dark` selected by mode when installed |
+| **GTK apps** | the theme's `gtk.css` when shipped, otherwise a generated sheet: libadwaita CSS variables for GNOME 47+ apps, the legacy named colors for older libadwaita and adw-gtk3, and the classic GTK3 names — into `gtk-4.0` + `gtk-3.0` · `adw-gtk3` / `adw-gtk3-dark` selected by mode when installed. Apps read it when they start |
 | **GNOME** | accent color from the theme's accent · `color-scheme` from its mode · fallback desktop color behind the wallpaper and lock fade |
 | **Icons & cursor** | the declared Yaru variant (`-dark` on dark themes), else the variant nearest the accent; without Yaru, a Papirus overlay with every folder in the accent's color · Bibata Modern Ice on dark, Classic on light |
 | **Terminals** | Ghostty include · Alacritty `general.import` · Kitty `include` · foot `include` — one generated fragment each, and every **open** window recolors instantly over OSC; <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> makes **new** Ghostty windows match |
@@ -349,6 +349,7 @@ theme target on tmux          # theme the tmux status line too (then: theme inst
 | `browser` | on | Chromium-family frame color, running browsers only |
 | `vscode` | on | VS Code-family `workbench.colorTheme`, only when the extension is installed |
 | `live` | on | the instant recolor pass |
+| `font` | on | system and shell font: JetBrains Mono for themes that declare `font = "mono"`, the GNOME default otherwise |
 
 <a id="icons-folders-and-cursor"></a>
 ## 📁 Icons, Folders and Cursor
@@ -433,7 +434,7 @@ Verify first with `theme add <url>` and `theme doctor` — the theme must yield 
 <a id="the-colson-pack"></a>
 ## 🧬 The Colson Pack
 
-Omarchy's catalog is someone else's taste. These nine are mine, shipped as their own bundle collection at [colson0x1/colson-theme-pack](https://github.com/colson0x1/colson-theme-pack) and part of the default library. Every one is a complete bundle: a 16-color palette, an icon variant, a browser frame color, an editor theme where one fits, and four wallpapers forged from the palette itself — no stock imagery anywhere.
+Omarchy's catalog is someone else's taste. These ten are mine, shipped as their own bundle collection at [colson0x1/colson-theme-pack](https://github.com/colson0x1/colson-theme-pack) and part of the default library. Every one is a complete bundle: a 16-color palette, an icon variant, a browser frame color, an editor theme where one fits, and wallpapers forged from the palette itself — no stock imagery anywhere. Each declares its design knobs in `gnome.toml`: typography (JetBrains Mono across the shell and the system font for the hacker themes), corner radius, glass strength, and the coordinates printed on the grid and contour wallpapers.
 
 | Theme | Mode | Accent | The room |
 |---|---|---|---|
@@ -445,6 +446,7 @@ Omarchy's catalog is someone else's taste. These nine are mine, shipped as their
 | `fog` | dark | `#8FB3C9` | Bay Area, 6 a.m. — cool grey-blue, soft contours, the sun behind the marine layer |
 | `golden` | dark | `#FF9F43` | Palo Alto golden hour — warm dark, sunset orange, the last commit before dinner |
 | `cupertino` | light | `#0A6CFF` | aluminum and daylight — graphite type, system blue, the design studio |
+| `defcon` | dark | `#FF2BD6` | Las Vegas, the first weekend of August — black, magenta neon and marquee yellow; fourteen wallpapers, Vegas coordinates |
 | `zeroday` | dark | `#FF2D55` | red team — black and crimson, glowing traces, a waterfall with too many carriers |
 
 ```shell
@@ -569,7 +571,7 @@ Then drop the binary the way it came in: `npm uninstall -g colson-arch-theme` on
 <a id="troubleshooting"></a>
 ## 🩺 Troubleshooting
 
-`theme doctor -v` first — it reports the distro, GNOME version, every hook, every extension, both timers, and palette coverage for all 142 themes. Then:
+`theme doctor -v` first — it reports the distro, GNOME version, every hook, every extension, both timers, and palette coverage for all 143 themes. Then:
 
 | Symptom | Cause · Fix |
 |---|---|
@@ -583,6 +585,7 @@ Then drop the binary the way it came in: `npm uninstall -g colson-arch-theme` on
 | Ghostty still shows the old palette | Ghostty re-reads its config only on reload — press <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> once; new windows do not pick it up on their own |
 | Neovim looks boxed inside the terminal, or the tmux bar stops short of the edges | Ghostty paints its window padding, and the leftover strip when the cell height does not divide the window height, in the window background color. For an edge-to-edge grid set `window-padding-x = 0` and `window-padding-y = 0`, then pick `adjust-cell-height` so the cell height divides your screen height exactly (on a 1080px screen, a 24px cell gives 45 rows), and restart Ghostty — padding changes apply to new windows only. `window-padding-color = extend` is the alternative, but it stretches whatever sits at the edge, a colored tmux tab included |
 | GTK3 apps ignore the theme | Install `adw-gtk-theme` — it makes GTK3 apps read the same color sheet GTK4 apps do |
+| Settings or another libadwaita app still looks stock | GTK reads `gtk.css` only when an app starts — close and reopen it after a switch |
 | Neovim colorscheme did not change | The hook applies at `VimEnter`, so restart Neovim after a switch. It changes the scheme only when the declared one is installed (`theme preview <name>` shows which), and it always aligns the editor canvas to the terminal when both are dark or both are light |
 | `theme pick` refuses to start | It needs `fzf` — `sudo pacman -S fzf` (or your distro's equivalent) |
 | Extensions were skipped during `install` | `gnome-extensions-cli` is installed on demand and needs `uv` or `pipx`; install one and re-run `theme install` |

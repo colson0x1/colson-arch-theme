@@ -11,11 +11,15 @@ The forge and the Colson pack.
 
 ### Added
 - **`theme forge [name|all] [--styles …] [--size WxH] [--out DIR] [--svg|--png] [--seed N]`.** Original wallpapers generated from any theme's palette in eight styles: `topology` (regions, replication, a consistent-hashing ring), `rack` (a 42U data-center row with live LEDs), `phosphor` (a scrolling cluster log on a CRT), `circuit` (PCB traces, ICs, silkscreen), `spectrum` (an SDR waterfall), `grid` (golden-ratio minimalism), `contour` (Bay-fog terrain with a low sun), `lamport` (happens-before with vector clocks). Deterministic per theme and style, resolution-independent SVG, rendered to 4K PNG through `rsvg-convert` when present. They join the theme's wallpaper set through an overlay under `_forge/`; third-party bundles are never written to. `theme forge all` renders SVG for the whole library.
-- **The Colson pack** — nine original themes shipped as their own bundle collection and part of the default library: `phosphor`, `amber`, `hyperscale`, `quorum`, `platinum`, `fog`, `golden`, `cupertino` (light), `zeroday`. Each carries a full 16-color palette, an icon variant, a browser frame color, an editor theme where one fits, and four forged wallpapers.
+- **The Colson pack** — ten original themes shipped as their own bundle collection and part of the default library: `defcon`, `phosphor`, `amber`, `hyperscale`, `quorum`, `platinum`, `fog`, `golden`, `cupertino` (light), `zeroday`. Each carries a full 16-color palette, an icon variant, a browser frame color, an editor theme where one fits, design knobs in `gnome.toml`, and forged wallpapers (fourteen for `defcon`).
+- **Design knobs.** A bundle may declare `gnome.toml` with `font = "mono"|"sans"`, `radius`, `glass` and `coords`; the shell sheet takes its typography, corner radii and translucency from them, mono themes set the system font to JetBrains Mono (new `font` target, reset on sans themes and uninstall), and the forge prints the coordinates on grid and contour wallpapers. Seeded forge output gets its own filename.
 - **Collections.** Any clone laid out as `_<name>/themes/*` is a bundle collection beside the official Omarchy repo; `theme list` groups official, Colson pack and community; bundles inside a collection cannot be removed by `theme remove`.
 
 ### Changed
 - SVG counts as a wallpaper format; GNOME renders it through librsvg, so a forge without `rsvg-convert` still works.
+
+### Fixed
+- libadwaita apps on GNOME 47+ (Settings, Files, everything built on libadwaita 1.6 or newer) ignored the generated colors: they read CSS variables such as `--window-bg-color`, not the legacy `@define-color` names. The sheet now writes the variables, the legacy names and the classic GTK3 names, so GTK4, older libadwaita, adw-gtk3 and plain GTK3 all follow the theme. Apps still read `gtk.css` only at start.
 
 ## [1.1.2] — 2026-09-06
 
