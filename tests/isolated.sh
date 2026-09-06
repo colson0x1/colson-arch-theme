@@ -110,7 +110,6 @@ EOF
 
 # ── the flows ─────────────────────────────────────────────────────────────────
 "$T" install --no-sync --no-extensions > "$FAKE/install1.log"
-"$T" target on tmux > /dev/null
 "$T" install --no-sync --no-extensions > "$FAKE/install2.log"
 : > "$FAKE/calls.log"
 "$T" mocha > "$FAKE/mocha.log"
@@ -118,8 +117,8 @@ python3 - <<'EOF'
 import os, pathlib, re, tomllib
 F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"
 i1, i2 = (F / "install1.log").read_text(), (F / "install2.log").read_text()
-assert "alacritty: import wired" in i1 and "kitty: include wired" in i1 and "foot: include wired" in i1 and "tmux: opt-in" in i1, i1
-assert "alacritty: import already wired" in i2 and "kitty: include already wired" in i2 and "tmux: source-file wired" in i2, i2
+assert "alacritty: import wired" in i1 and "kitty: include wired" in i1 and "foot: include wired" in i1 and "tmux: source-file wired" in i1, i1
+assert "alacritty: import already wired" in i2 and "kitty: include already wired" in i2 and "tmux: source-file already wired" in i2, i2
 ala = (cfg / "alacritty/alacritty.toml").read_text()
 assert '[general]\nimport = ["~/.config/alacritty/colson-arch-theme.toml"]\nlive_config_reload = true' in ala, ala
 tomllib.loads(ala); tomllib.loads((cfg / "alacritty/colson-arch-theme.toml").read_text())
@@ -127,7 +126,11 @@ assert 'background = "#1e1e2e"' in (cfg / "alacritty/colson-arch-theme.toml").re
 assert "background #1e1e2e" in (cfg / "kitty/colson-arch-theme.conf").read_text()
 fo = (cfg / "foot/colson-arch-theme.ini").read_text()
 assert "[colors]\nbackground=1e1e2e" in fo and "[cursor]\ncolor=1e1e2e" in fo and (cfg / "foot/foot.ini").read_text().startswith("# colson-arch-theme:")
-assert 'set -g status-style "bg=#1e1e2e' in (cfg / "tmux/colson-arch-theme.conf").read_text() and "source-file -q " in (cfg / "tmux/tmux.conf").read_text()
+tm = (cfg / "tmux/colson-arch-theme.conf").read_text()
+assert 'set -g status-style "bg=#1e1e2e' in tm and "source-file -q " in (cfg / "tmux/tmux.conf").read_text()
+assert 'set -g window-status-current-format "#[fg=#000000,bg=#89b4fa,bold] #I #{b:pane_current_path} "' in tm, tm
+assert 'set -g @colson-arch-theme-status-right "#{?client_prefix,' in tm and "tmux compose'" in tm and "bind T run-shell -b '" in tm and "tmux toggle" in tm, tm
+assert not (cfg / "colson-arch-theme/tmux").exists() or (cfg / "colson-arch-theme/tmux").read_text().strip() == "theme"
 s = (cfg / "Cursor/User/settings.json").read_text()
 assert '"workbench.colorTheme": "Catppuccin Mocha"' in s and "// a comment survives" in s and '"editor.fontSize": 14,' in s, s
 assert '"Cursor": "Cursor Dark"' in (cfg / "colson-arch-theme/vscode.prev").read_text()
@@ -160,6 +163,83 @@ rep = (F / "mocha.log").read_text()
 assert "icons colson-arch-theme-papirus-blue-dark" in rep and "cursor Bibata-Modern-Ice" in rep and "vscode Catppuccin Mocha → Cursor" in rep and "2 neovim · tmux" in rep, rep
 print("mocha: hooks, fragments, editor, overlay, shell + gtk sheets, gsettings, browser, live — OK")
 EOF
+
+# ── tmux: yours or the theme's ────────────────────────────────────────────────
+: > "$FAKE/calls.log"
+"$T" tmux mine > "$FAKE/tmux-mine.log"
+"$T" tmux > "$FAKE/tmux-status.log"
+python3 - <<'EOF'
+import os, pathlib
+F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"; log = (F / "calls.log").read_text()
+tm = (cfg / "tmux/colson-arch-theme.conf").read_text()
+assert tm.startswith("# colson-arch-theme: graphite — your own tmux status line rules") and "status-style" not in tm and "bind T run-shell -b '" in tm, tm
+assert (cfg / "colson-arch-theme/tmux").read_text().strip() == "mine"
+for needle in ("tmux set -gqu status-style", "tmux set -gqu status-right", "tmux set -gqu window-status-current-format", "tmux set -gqu menu-selected-style",
+               "tmux set -gqu @colson-arch-theme-status-right", f"tmux source-file -q {cfg}/tmux/tmux.conf"):
+    assert needle in log, needle
+assert f"tmux source-file -q {cfg}/tmux/colson-arch-theme.conf" not in log
+assert "your own status line" in (F / "tmux-mine.log").read_text()
+st = (F / "tmux-status.log").read_text()
+assert "your own status line" in st and "mine — yours until the next switch" in st and "prefix T" in st and "source-file wired" in st, st
+print("tmux mine: fragment steps aside, options unset, tmux.conf re-sourced, state recorded — OK")
+EOF
+: > "$FAKE/calls.log"
+"$T" tmux toggle > /dev/null
+python3 - <<'EOF'
+import os, pathlib
+F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"; log = (F / "calls.log").read_text()
+assert 'set -g status-style "bg=#1e1e2e' in (cfg / "tmux/colson-arch-theme.conf").read_text()
+assert (cfg / "colson-arch-theme/tmux").read_text().strip() == "theme" and f"tmux source-file -q {cfg}/tmux/colson-arch-theme.conf" in log  # written: it differed from mine
+EOF
+"$T" tmux mine > /dev/null
+: > "$FAKE/calls.log"
+"$T" mocha > /dev/null
+python3 - <<'EOF'
+import os, pathlib
+F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"; log = (F / "calls.log").read_text()
+assert (cfg / "colson-arch-theme/tmux").read_text().strip() == "theme", "a switch brings the theme's status line back"
+assert 'set -g status-style "bg=#1e1e2e' in (cfg / "tmux/colson-arch-theme.conf").read_text() and "tmux source-file -q " in log
+EOF
+: > "$FAKE/calls.log"
+"$T" target off tmux > "$FAKE/target-off.log"
+python3 - <<'EOF'
+import os, pathlib
+F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"; log = (F / "calls.log").read_text()
+assert "status-style" not in (cfg / "tmux/colson-arch-theme.conf").read_text() and "tmux set -gqu status-style" in log
+assert "(your own status line, live)" in (F / "target-off.log").read_text(), (F / "target-off.log").read_text()
+EOF
+: > "$FAKE/calls.log"
+"$T" target on tmux > "$FAKE/target-on.log"
+python3 - <<'EOF'
+import os, pathlib
+F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"; log = (F / "calls.log").read_text()
+assert 'set -g status-style "bg=#1e1e2e' in (cfg / "tmux/colson-arch-theme.conf").read_text() and f"tmux source-file -q {cfg}/tmux/colson-arch-theme.conf" in log
+assert "(the theme's status line, live)" in (F / "target-on.log").read_text(), (F / "target-on.log").read_text()
+EOF
+: > "$FAKE/calls.log"
+"$T" tmux key F12 > /dev/null
+"$T" tmux key off > /dev/null
+"$T" tmux key T > /dev/null
+python3 - <<'EOF'
+import os, pathlib
+F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"; log = (F / "calls.log").read_text()
+assert "tmux unbind T\n" in log and "tmux unbind F12\n" in log and (cfg / "colson-arch-theme/tmux-key").read_text().strip() == "T", log
+assert "bind T run-shell -b '" in (cfg / "tmux/colson-arch-theme.conf").read_text()
+print("tmux toggle, switch, target on/off, key — OK")
+EOF
+PYTHONDONTWRITEBYTECODE=1 HOME="$FAKE" T="$T" python3 - <<'EOF'
+import importlib.util, os, re
+from importlib.machinery import SourceFileLoader
+spec = importlib.util.spec_from_loader("th", SourceFileLoader("th", os.environ["T"])); th = importlib.util.module_from_spec(spec); spec.loader.exec_module(th)
+assert th.tmux_hooks("#(a) x #[fg=red]#(b $(c)) #{?x,#(d),} #(open") == ["#(a)", "#(b $(c))", "#(d)"]
+assert th.tmux_hooks("plain %H:%M") == []
+d = th.themes()["mocha"]; lines, acc, mode = th.terminal_colors(d)
+frag = th.tmux_fragment("mocha", lines, acc, "dark")
+setted = set(re.findall(r"^set -gq? (\S+)", frag, re.M)) - {f"@{th.APP}-status-left", f"@{th.APP}-status-right"}
+assert setted == set(th.TMUX_OPTIONS) - {"status-left", "status-right"}, setted ^ set(th.TMUX_OPTIONS)
+assert "#(" not in frag.replace("run-shell", ""), "run-shell format-expands #(…); the design must never travel through it"
+print("tmux unit: #(…) extraction, fragment options == restore list — OK")
+EOF
 : > "$FAKE/calls.log"
 "$T" latte > "$FAKE/latte.log"
 python3 - <<'EOF'
@@ -182,6 +262,7 @@ F = pathlib.Path(os.environ["FAKE"]); cfg = F / ".config"; log = (F / "calls.log
 assert '"workbench.colorTheme": "Cursor Dark"' in (cfg / "Cursor/User/settings.json").read_text() and not (cfg / "colson-arch-theme/vscode.prev").exists()
 assert "chromium --no-startup-window --set-theme-color=0,0,0" in log and "accent-color slate" in log and "primary-color #000000" in log
 assert (cfg / "alacritty/colson-arch-theme.toml").read_text().startswith("# colson-arch-theme: graphite")
+assert "status-style" not in (cfg / "tmux/colson-arch-theme.conf").read_text() and "tmux set -gqu status-style" in log, "graphite returns your own tmux status line"
 assert 'local scheme, mode = nil, "dark"' in (cfg / "colson-arch-theme/active-nvim.lua").read_text()
 assert "icons colson-arch-theme-papirus-white-dark" in rep and "vscode restored: Cursor" in rep, rep
 print("graphite: editor restored, black frame, white folders, base fragments — OK")
@@ -197,6 +278,7 @@ for f in ("alacritty/colson-arch-theme.toml", "kitty/colson-arch-theme.conf", "f
     assert not (cfg / f).exists(), f
 assert not list((F / ".local/share/icons").glob("colson-arch-theme-papirus-*"))
 log = (F / "calls.log").read_text()
+assert "tmux unbind T\n" in log and not (cfg / "colson-arch-theme/tmux").exists() and not (cfg / "colson-arch-theme/tmux-key").exists()
 for k in ("gtk-theme", "icon-theme", "cursor-theme"):
     assert f"gsettings reset org.gnome.desktop.interface {k}" in log, k
 assert "reset org.gnome.shell.extensions.dash-to-dock custom-background-color" in log and "org.gnome.shell.extensions.user-theme name " in log

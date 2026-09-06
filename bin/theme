@@ -3,7 +3,7 @@
 
 One command themes the whole desktop, live: wallpaper, GNOME Shell (generated), GTK apps
 (shipped or generated libadwaita colors, adw-gtk3 by mode), accent + light/dark, icons with
-accent-colored folders, cursor, Ghostty / Alacritty / Kitty / foot, tmux (opt-in), Neovim,
+accent-colored folders, cursor, Ghostty / Alacritty / Kitty / foot, tmux, Neovim,
 btop, the browser frame, the editor theme — and every open terminal and Neovim recolors
 instantly. 133 Omarchy theme bundles (official + community), a live-preview picker,
 wallpaper rotation, day/night scheduling, and a true-black monochrome base (Graphite).
@@ -74,11 +74,14 @@ FOOT_CONFIG = XDG_CONFIG / "foot" / "foot.ini"
 FOOT_ACTIVE = XDG_CONFIG / "foot" / f"{APP}.ini"
 TMUX_CONFIGS = (XDG_CONFIG / "tmux" / "tmux.conf", HOME / ".tmux.conf")
 TMUX_ACTIVE = XDG_CONFIG / "tmux" / f"{APP}.conf"
+TMUX_MODE = STATE / "tmux"              # theme | mine — whose status line shows (mine: yours, until the next switch)
+TMUX_KEY = STATE / "tmux-key"           # prefix key that toggles the two (T unless moved; "off" removes the binding)
 XDG_DATA_DIRS = [pathlib.Path(d) for d in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":") if d]
 ICON_DIRS = tuple([XDG_DATA / "icons", HOME / ".icons"] + [d / "icons" for d in XDG_DATA_DIRS])
 THEME_DIRS = tuple([XDG_DATA / "themes", HOME / ".themes"] + [d / "themes" for d in XDG_DATA_DIRS])
 RUNTIME = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 SCRIPT = pathlib.Path(os.path.realpath(__file__))
+THEME_BIN = shutil.which("theme") or str(SCRIPT)   # what tmux calls back into from the fragment
 MANAGED = "managed by `theme`"
 
 IMG = (".jpg", ".jpeg", ".png", ".webp", ".svg")
@@ -484,7 +487,7 @@ TARGETS = [  # name, default, what `theme <name>` touches
     ("alacritty", True, "Alacritty colors import"),
     ("kitty", True, "Kitty colors include"),
     ("foot", True, "foot colors include"),
-    ("tmux", False, "tmux status line, borders, messages, copy mode (opt-in: your own status design wins by default)"),
+    ("tmux", True, "tmux status line, borders, messages, copy mode, popups — theme tmux mine brings your own back any time"),
     ("nvim", True, "Neovim: declared colorscheme at VimEnter, canvas aligned to the terminal"),
     ("btop", True, "btop theme"),
     ("browser", True, "Chromium / Chrome / Brave frame color, applied to a running browser"),
@@ -524,7 +527,11 @@ def cmd_target(args):
         st[args[1]] = args[0] == "on"
         STATE.mkdir(parents=True, exist_ok=True)
         TARGETS_FILE.write_text("".join(f"{k}={'on' if v else 'off'}\n" for k, v in st.items() if v != TARGET_DEFAULT[k]))
-        hint = "  (theme install wires its hook; theme <name> applies it)" if args[0] == "on" and args[1] in ("tmux", "alacritty", "kitty", "foot") else ""
+        hint = ""
+        if args[1] == "tmux":
+            hint = "  " + tmux_target_changed(st["tmux"])
+        elif args[0] == "on" and args[1] in ("alacritty", "kitty", "foot"):
+            hint = "  (theme install wires its hook; theme <name> applies it)"
         print(f"target {args[1]}: {args[0]}{hint}")
         return
     sys.exit("usage: theme target [on|off <name>]      (theme targets)")
@@ -585,25 +592,80 @@ def foot_fragment(name, lines):
     return "\n".join(out) + "\n"
 
 
+def tmux_key():
+    """The prefix key that toggles between your status line and the theme's — T unless moved or switched off."""
+    k = TMUX_KEY.read_text().strip() if TMUX_KEY.exists() else "T"
+    return None if k in ("", "off") else k
+
+
+def tmux_key_taken(key):
+    """True when your own tmux.conf binds that prefix key: the toggle then stays out of its way."""
+    conf = tmux_config()
+    if not conf or not key:
+        return False
+    pat = re.compile(r"^\s*bind(?:-key)?\s+(?:-[a-zA-Z]+\s+)*(?:-T\s+prefix\s+)?" + re.escape(key) + r"(?:\s|$)")
+    return any(pat.match(l) for l in conf.read_text().splitlines())
+
+
+def tmux_bind_line():
+    key = tmux_key()
+    if not key or tmux_key_taken(key):
+        return None
+    return f"bind {key} run-shell -b '\"{THEME_BIN}\" tmux toggle >/dev/null 2>&1'"
+
+
 def tmux_fragment(name, lines, decl_acc, mode):
-    c = scheme_from(lines or GRAPHITE_LINES, decl_acc, mode)
-    p = full_palette(lines or GRAPHITE_LINES)
-    dim = _mix(c["fg"], c["bg"], 0.35)
-    return "\n".join([
-        f"# {APP}: theme {name} — {MANAGED}",
-        f'set -g status-style "bg={c["bg"]},fg={c["fg"]}"',
-        f'set -g window-status-style "fg={dim},bg=default"',
-        f'set -g window-status-current-style "fg={c["acc_fg"]},bg={c["acc"]},bold"',
-        f'set -g window-status-activity-style "fg={c["acc"]},bold"',
-        f'set -g pane-border-style "fg={_mix(c["bg"], c["fg"], 0.18)}"',
-        f'set -g pane-active-border-style "fg={c["acc"]}"',
-        f'set -g message-style "bg={c["surface2"]},fg={c["fg"]}"',
-        f'set -g message-command-style "bg={c["surface2"]},fg={c["fg"]}"',
-        f'set -g mode-style "bg={p["sel_bg"]},fg={p["sel_fg"] or c["fg"]}"',
-        f'set -g clock-mode-colour "{c["acc"]}"',
-        f'set -g display-panes-active-colour "{c["acc"]}"',
-        f'set -g display-panes-colour "{dim}"',
-    ]) + "\n"
+    """The theme's status line — window tabs on the left with the current one as an accent block; prefix and zoom
+    state, the running command, session, clock and date on the right — plus pane borders, messages, copy mode,
+    popups and menus, every color from the palette. status-left/right are composed by `theme tmux compose`, so
+    the #(…) hooks of your own status line survive. Without a palette (graphite) the fragment steps aside."""
+    bind = tmux_bind_line()
+    hint = f" · prefix {tmux_key()} toggles" if bind else ""
+    if not lines:
+        return "\n".join([f"# {APP}: graphite — your own tmux status line rules ({MANAGED})",
+                          f"# theme tmux theme puts the active theme's status line back{hint}"]
+                         + ([bind] if bind else [])) + "\n"
+    c = scheme_from(lines, decl_acc, mode)
+    p = full_palette(lines)
+    dim, faint = _mix(c["fg"], c["bg"], 0.35), _mix(c["fg"], c["bg"], 0.55)
+    border = _mix(c["bg"], c["fg"], 0.18)
+    sel_fg = p["sel_fg"] or c["fg"]
+    right = (f"#{{?client_prefix,#[fg={c['acc_fg']}]#[bg={c['acc']}]#[bold] PREFIX #[default] ,}}"
+             f"#{{?window_zoomed_flag,#[fg={c['acc']}]#[bold]ZOOM#[default]  ,}}"
+             f"#[fg={faint}]#{{b:pane_current_command}}  #[fg={c['acc']},bold]#S  #[fg={dim}]%H:%M #[fg={faint}]%a %Y-%m-%d ")
+    out = [f"# {APP}: theme {name} — {MANAGED}",
+           f"# theme tmux mine = your own status line, now · the next switch brings this one back{hint}",
+           f'set -g status-style "bg={c["bg"]},fg={c["fg"]}"',
+           "set -g status-right-length 100",
+           'set -g window-status-separator ""',
+           f'set -g window-status-format "#[fg={dim},bg={c["bg"]}] #I #{{b:pane_current_path}} "',
+           f'set -g window-status-current-format "#[fg={c["acc_fg"]},bg={c["acc"]},bold] #I #{{b:pane_current_path}} "',
+           f'set -g window-status-style "fg={dim},bg={c["bg"]}"',
+           f'set -g window-status-current-style "fg={c["acc_fg"]},bg={c["acc"]},bold"',
+           f'set -g window-status-activity-style "fg={c["acc"]},bold"',
+           f'set -g window-status-bell-style "fg={c["acc_fg"]},bg={c["acc"]},bold"',
+           f'set -g pane-border-style "fg={border}"',
+           f'set -g pane-active-border-style "fg={c["acc"]}"',
+           f'set -g message-style "bg={c["bg"]},fg={c["acc"]},bold"',
+           f'set -g message-command-style "bg={c["bg"]},fg={dim}"',
+           f'set -g mode-style "bg={p["sel_bg"]},fg={sel_fg}"',
+           f'set -g clock-mode-colour "{c["acc"]}"',
+           f'set -g display-panes-active-colour "{c["acc"]}"',
+           f'set -g display-panes-colour "{dim}"',
+           f'set -gq copy-mode-match-style "bg={c["surface2"]},fg={c["fg"]}"',
+           f'set -gq copy-mode-current-match-style "bg={c["acc"]},fg={c["acc_fg"]}"',
+           f'set -gq copy-mode-mark-style "bg={c["acc"]},fg={c["acc_fg"]}"',
+           f'set -gq popup-style "bg={c["bg"]},fg={c["fg"]}"',
+           f'set -gq popup-border-style "fg={border}"',
+           f'set -gq menu-style "bg={c["surface2"]},fg={c["fg"]}"',
+           f'set -gq menu-selected-style "bg={c["acc"]},fg={c["acc_fg"]}"',
+           f'set -gq menu-border-style "fg={border}"',
+           f'set -g @{APP}-status-left ""',
+           f'set -g @{APP}-status-right "{right}"',
+           f"run-shell 'theme tmux compose 2>/dev/null || \"{THEME_BIN}\" tmux compose'"]
+    if bind:
+        out.append(bind)
+    return "\n".join(out) + "\n"
 
 
 # ─────────────────────────────── terminals: hooks ────────────────────────────
@@ -633,6 +695,7 @@ ALACRITTY_IMPORT = f'"{tilde(ALACRITTY_ACTIVE)}"'
 KITTY_INCLUDE = f"include {APP}.conf"
 FOOT_INCLUDE = f"include={FOOT_ACTIVE}"
 TMUX_SOURCE = f"source-file -q {TMUX_ACTIVE}"
+TMUX_HOOK_NOTE = "the active theme's tmux status line · theme tmux mine = your own · theme uninstall removes this"
 
 
 def hook_alacritty():
@@ -693,15 +756,14 @@ def tmux_config():
 
 
 def hook_tmux():
-    if not targets_state()["tmux"]:
-        return "tmux: opt-in — `theme target on tmux` to theme the status line"
     conf = tmux_config()
     if not conf:
         return "tmux: no tmux.conf — skipped"
-    r = _wire(conf, TMUX_SOURCE, "active theme for the status line, borders and messages")
+    if not targets_state()["tmux"]:
+        return "tmux: target off — `theme target on tmux` to theme the status line"
+    r = _wire(conf, TMUX_SOURCE, TMUX_HOOK_NOTE)
     if not TMUX_ACTIVE.exists():
-        TMUX_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-        TMUX_ACTIVE.write_text(tmux_fragment("graphite", [], "#ffffff", "dark"))
+        tmux_write(active_name())
     return "tmux: source-file " + ("already wired" if r == "already" else r)
 
 
@@ -791,6 +853,202 @@ def tmux_live():
     if subprocess.run(["tmux", "list-sessions"], capture_output=True).returncode != 0:
         return False
     return subprocess.run(["tmux", "source-file", "-q", str(TMUX_ACTIVE)], capture_output=True).returncode == 0
+
+
+# ─────────────────────────────── tmux: yours or the theme's ──────────────────
+TMUX_OPTIONS = (  # everything the theme's fragment sets — `theme tmux mine` unsets exactly these, then re-sources your tmux.conf
+    "status-style", "status-left", "status-right", "status-right-length", "window-status-separator",
+    "window-status-format", "window-status-current-format", "window-status-style", "window-status-current-style",
+    "window-status-activity-style", "window-status-bell-style", "pane-border-style", "pane-active-border-style",
+    "message-style", "message-command-style", "mode-style", "clock-mode-colour", "display-panes-active-colour",
+    "display-panes-colour", "copy-mode-match-style", "copy-mode-current-match-style", "copy-mode-mark-style",
+    "popup-style", "popup-border-style", "menu-style", "menu-selected-style", "menu-border-style")
+TMUX_SIDES = ("status-left", "status-right")
+
+
+def tmux_mode():
+    """theme — the active theme's status line · mine — your own, until the next switch."""
+    return "mine" if TMUX_MODE.exists() and TMUX_MODE.read_text().strip() == "mine" else "theme"
+
+
+def tmux_set_mode(mode):
+    if tmux_mode() != mode:
+        STATE.mkdir(parents=True, exist_ok=True)
+        TMUX_MODE.write_text(mode + "\n")
+
+
+def tmux_showing_theme():
+    """Does the fragment on disk carry a theme, or is it stepping aside?"""
+    return TMUX_ACTIVE.exists() and "set -g status-style" in TMUX_ACTIVE.read_text()
+
+
+def tmux_write(name, lines=None, decl_acc=None, mode=None):
+    """Write the fragment for `name` under the current target and mode. → True when it carries a theme."""
+    TMUX_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+    if targets_state()["tmux"] and tmux_mode() == "theme" and name and name != "graphite":
+        if lines is None:
+            d = themes().get(name)
+            if d:
+                lines, decl_acc, tmode = terminal_colors(d)
+                mode = "light" if (tmode == "light" or (d / "light.mode").exists()) else "dark"
+        if lines:
+            TMUX_ACTIVE.write_text(tmux_fragment(name, lines, decl_acc, mode or "dark"))
+            return True
+    TMUX_ACTIVE.write_text(tmux_fragment("graphite", [], "#ffffff", "dark"))
+    return False
+
+
+def _tmux(*args):
+    return subprocess.run(["tmux", *args], capture_output=True, text=True)
+
+
+def tmux_running():
+    return bool(shutil.which("tmux")) and _tmux("list-sessions").returncode == 0
+
+
+def tmux_hooks(s):
+    """Every balanced #(…) command segment of a tmux format string, in order."""
+    out, i = [], 0
+    while (j := s.find("#(", i)) >= 0:
+        depth, k = 0, j + 1
+        while k < len(s):
+            depth += (s[k] == "(") - (s[k] == ")")
+            if depth == 0:
+                break
+            k += 1
+        if k >= len(s):
+            break
+        out.append(s[j:k + 1])
+        i = k + 1
+    return out
+
+
+def tmux_compose():
+    """Run by the fragment's run-shell: status-left and status-right become the theme's design with every #(…)
+    segment of the value they had kept in front — that is where plugins live (tmux-continuum's autosave hook,
+    online-status, a battery script), so they keep running under the theme. Silent and idempotent."""
+    if not shutil.which("tmux"):
+        return
+    for side in TMUX_SIDES:
+        ours = _tmux("show", "-gv", f"@{APP}-{side}")
+        if ours.returncode != 0:
+            continue                                    # no design set: your own status line rules
+        cur = _tmux("show", "-gv", side).stdout.rstrip("\n")
+        new = "".join(tmux_hooks(cur)) + ours.stdout.rstrip("\n")
+        if new != cur:
+            _tmux("set", "-g", side, new)
+
+
+def tmux_restore():
+    """Your own status line, now: unset every option the fragment sets, then re-source your tmux.conf — which
+    re-runs its plugin manager, so plugin hooks come back exactly as your config makes them."""
+    conf = tmux_config()
+    if not conf or not shutil.which("tmux"):
+        return False
+    if DRY:
+        print(f"  [dry-run] tmux set -gqu <{len(TMUX_OPTIONS)} options> · tmux source-file {conf}")
+        return True
+    if not tmux_running():
+        return False
+    for opt in TMUX_OPTIONS + tuple(f"@{APP}-{s}" for s in TMUX_SIDES):
+        _tmux("set", "-gqu", opt)
+    return _tmux("source-file", "-q", str(conf)).returncode == 0
+
+
+def tmux_unbind(key=None):
+    key = key or tmux_key()
+    if key and not tmux_key_taken(key) and not DRY and tmux_running():
+        _tmux("unbind", key)
+
+
+def tmux_switch(mode=None):
+    """Set the mode, rewrite the fragment for the active theme, make the running server match. → (themed, live)"""
+    if mode:
+        tmux_set_mode(mode)
+    conf = tmux_config()
+    if conf and targets_state()["tmux"]:
+        _wire(conf, TMUX_SOURCE, TMUX_HOOK_NOTE)
+    prev = tmux_showing_theme()
+    themed = tmux_write(active_name())
+    live = tmux_live() if themed else (tmux_restore() if prev else False)
+    return themed, live
+
+
+def tmux_target_changed(on):
+    """`theme target on|off tmux` takes effect at once: hook wired, fragment rewritten, the running server told."""
+    if not tmux_config():
+        return "(no tmux.conf found)"
+    themed, live = tmux_switch()
+    if on:
+        return "(" + ("the theme's status line" if themed else "your own status line — pick a theme") + (", live" if live else "") + ")"
+    return "(your own status line" + (", live" if live else "") + ")"
+
+
+def tmux_status():
+    conf, T, mode, name, key = tmux_config(), targets_state(), tmux_mode(), active_name(), tmux_key()
+    wired = bool(conf) and TMUX_SOURCE in conf.read_text()
+    themed = tmux_showing_theme()
+    print()
+    print(f" {B('tmux')}  " + (f"the theme's status line — {name}" if themed else "your own status line"))
+    print(f" {rule()}")
+    rows = [("mode", "mine — yours until the next switch" if mode == "mine" else "theme — the active theme's, when it has one"),
+            ("target", "on" if T["tmux"] else "off — theme target on tmux"),
+            ("hook", ("source-file wired" if wired else "not wired — theme <name> or theme install") if conf else "no tmux.conf"),
+            ("server", "running — changes land live" if tmux_running() else "not running — applies on the next start"),
+            ("toggle", (f"prefix {key}" + (" — taken by your own binding, so off (theme tmux key <other>)" if tmux_key_taken(key) else ""))
+                       if key else "off — theme tmux key T"),
+            ("fragment", tilde(TMUX_ACTIVE))]
+    for k, v in rows:
+        print(f"   {D(k):<20} {v}")
+    print()
+    print(f"   {D('theme tmux mine')}  yours, now   {D('·')}  {D('theme tmux theme')}  the theme's   {D('·')}  "
+          f"{D('theme tmux toggle')}  flip   {D('·')}  {D('theme tmux key <key|off>')}  move the binding")
+    credit()
+    print()
+
+
+def cmd_tmux(args):
+    sub = args[0] if args else "status"
+    if sub == "compose":
+        return tmux_compose()
+    if sub in ("mine", "theme", "toggle"):
+        if not tmux_config():
+            sys.exit("no tmux.conf found (~/.config/tmux/tmux.conf or ~/.tmux.conf)")
+        if sub != "mine" and not targets_state()["tmux"]:
+            sys.exit("the tmux target is off — theme target on tmux")
+        want = sub if sub != "toggle" else ("theme" if tmux_mode() == "mine" else "mine")
+        themed, live = tmux_switch(want)
+        tail = " · live" if live else ""
+        if want == "mine":
+            print(f" {B('tmux')}  your own status line{tail}   {D('the next switch, or theme tmux theme, brings the theme back')}")
+        elif themed:
+            print(f" {B('tmux')}  {active_name()}{tail}   {D('theme tmux mine brings your own back')}")
+        else:
+            print(f" {B('tmux')}  graphite keeps your own status line   {D('theme <name> for a themed one')}")
+        return
+    if sub == "key":
+        new = args[1] if len(args) > 1 else ""
+        if new != "off" and not re.fullmatch(r"(?:[CM]-)?(?:[A-Za-z0-9]|F(?:[1-9]|1[0-2]))", new):
+            sys.exit("usage: theme tmux key <key|off>      a prefix key: T · F12 · C-t · M-t · off")
+        old = tmux_key()
+        STATE.mkdir(parents=True, exist_ok=True)
+        TMUX_KEY.write_text(new + "\n")
+        if old and old != new:
+            tmux_unbind(old)
+        tmux_write(active_name())
+        live = tmux_live()
+        tail = " · live" if live else ""
+        key = tmux_key()
+        if not key:
+            print(f" {B('tmux')}  toggle key off{tail}   {D('theme tmux toggle still works from the shell')}")
+        elif tmux_key_taken(key):
+            print(f" {B('tmux')}  prefix {key} is bound in your tmux.conf, so the toggle stays off   {D('theme tmux key <other>')}")
+        else:
+            print(f" {B('tmux')}  prefix {key} toggles{tail}")
+        return
+    if sub in ("status", "show"):
+        return tmux_status()
+    sys.exit("usage: theme tmux [mine|theme|toggle|key <key|off>]")
 
 
 # ─────────────────────────────── browser frame ───────────────────────────────
@@ -2025,10 +2283,13 @@ def apply(name, wall="first", quiet=False):
             active.parent.mkdir(parents=True, exist_ok=True)
             active.write_text(frag(name, lines))
             r[key] = "yes"
+    tmux_themed = tmux_prev = False
     if T["tmux"] and tmux_config():
-        TMUX_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-        TMUX_ACTIVE.write_text(tmux_fragment(name, lines, decl_acc, m))
-        r["tmux"] = "yes"
+        hooked = _wire(tmux_config(), TMUX_SOURCE, TMUX_HOOK_NOTE) == "wired"
+        tmux_set_mode("theme")                        # a switch always brings the theme's status line back
+        tmux_prev = tmux_showing_theme()
+        tmux_themed = tmux_write(name, lines, decl_acc, m)
+        r["tmux"] = ("yes" if tmux_themed else "yours") + (" · hooked" if hooked else "")
 
     # editors, browser
     if T["nvim"]:
@@ -2053,7 +2314,9 @@ def apply(name, wall="first", quiet=False):
     if T["live"]:
         tl = terminals_live(lines)
         nl = nvim_live() if T["nvim"] else 0
-        tm = tmux_live() if (T["tmux"] and "tmux" in r) else False
+        tm = False
+        if T["tmux"] and "tmux" in r:
+            tm = tmux_live() if tmux_themed else (tmux_restore() if tmux_prev else False)
         r["live"] = f"{tl} terminal{'s' if tl != 1 else ''} · {nl} neovim" + (" · tmux" if tm else "")
 
     if quiet:
@@ -2504,9 +2767,13 @@ def cmd_uninstall(purge=False):
     unhook_alacritty()
     _unwire(KITTY_CONFIG, KITTY_INCLUDE)
     _unwire(FOOT_CONFIG, FOOT_INCLUDE)
+    tmux_was = tmux_showing_theme()
     for conf in TMUX_CONFIGS:
         _unwire(conf, TMUX_SOURCE)
-    for f in (KITTY_ACTIVE, FOOT_ACTIVE, TMUX_ACTIVE):
+    if tmux_was:
+        tmux_restore()                                 # the re-sourced tmux.conf no longer pulls the fragment
+    tmux_unbind()
+    for f in (KITTY_ACTIVE, FOOT_ACTIVE, TMUX_ACTIVE, TMUX_MODE, TMUX_KEY):
         f.unlink(missing_ok=True)
     editors_restore()
     gtk_clear()
@@ -2686,7 +2953,8 @@ def cmd_doctor(verbose=False, as_json=False):
     hk = env["hooks"]
     tline = " · ".join(f"{k} {'hook ok' if (k == 'ghostty' and env['ghostty_hook']) or hk.get(k) else ('present, no hook' if env['terminals'][k] else '-')}"
                        for k in ("ghostty", "alacritty", "kitty", "foot"))
-    tline += " · tmux " + ("hook ok" if hk["tmux"] else ("opt-in" if not env["targets"]["tmux"] else ("present, no hook" if env["terminals"]["tmux"] else "-")))
+    tline += " · tmux " + (("hook ok" + (" (your own bar)" if tmux_mode() == "mine" else "")) if hk["tmux"]
+                           else ("target off" if not env["targets"]["tmux"] else ("present, no hook — theme <name> wires it" if env["terminals"]["tmux"] else "-")))
     print(f"   {D('terminals'):<14} {tline}")
     print(f"   {D('live'):<14} {env['live']['terminal_ptys']} terminal pty(s) · {env['live']['neovim']} neovim socket(s)")
     br = ", ".join(f"{b['name']}{' (running)' if b['running'] else ''}" for b in env["browsers"]) or "-"
@@ -2791,10 +3059,11 @@ GROUPS = [
         ("show <name>", "Open the author's composed desktop screenshot in your image viewer.", ["theme show synthwave84"]),
     ]),
     ("APPLY", [
-        ("<name> [random]", "Switch the whole OS, live: wallpaper (first or random), generated GNOME Shell theme, GTK apps, accent + light/dark, icons with accent-colored folders, cursor, Ghostty / Alacritty / Kitty / foot, tmux (opt-in), Neovim, btop, the browser frame, the editor theme. Every open terminal and Neovim recolors instantly; nothing to reload.", ["theme moodpeak", "theme tokyo-night random"]),
+        ("<name> [random]", "Switch the whole OS, live: wallpaper (first or random), generated GNOME Shell theme, GTK apps, accent + light/dark, icons with accent-colored folders, cursor, Ghostty / Alacritty / Kitty / foot, tmux, Neovim, btop, the browser frame, the editor theme. Every open terminal and Neovim recolors instantly; nothing to reload.", ["theme moodpeak", "theme tokyo-night random"]),
         ("random", "Apply a random theme everywhere.", ["theme random"]),
         ("next", "Step to the next theme alphabetically.", ["theme next"]),
-        ("graphite", "The true-black monochrome OS: shell, GTK apps, terminals, Neovim canvas and browser frame in pure black and white; editor themes restored. Wallpaper is left alone.", ["theme graphite", "theme graphite && theme wall futurism"]),
+        ("graphite", "The true-black monochrome OS: shell, GTK apps, terminals, Neovim canvas and browser frame in pure black and white; editor themes and your own tmux status line restored. Wallpaper is left alone.", ["theme graphite", "theme graphite && theme wall futurism"]),
+        ("tmux [mine|theme|toggle|key <key|off>]", "Your tmux status line or the theme's. `mine` brings yours back this instant — the fragment steps aside, every option it set is unset, your tmux.conf is re-sourced — and the next theme switch brings the theme's back; `theme` re-applies the active theme's; `toggle` flips, also on prefix T unless that key is already yours (`key` moves or removes the binding). Plugin hooks in your status line (tmux-continuum autosave, online-status, battery scripts) are kept in front of the theme's design. Bare `theme tmux` shows which is on screen.", ["theme tmux", "theme tmux mine", "theme tmux key F12"]),
     ]),
     ("WALLPAPER", [
         ("wall <name|random>", "Wallpaper only — from one theme's set, or any of the 660+.", ["theme wall futurism", "theme wall random"]),
@@ -2811,10 +3080,10 @@ GROUPS = [
         ("credits", "Every theme author with their repository — the people this tool stands on.", ["theme credits"]),
     ]),
     ("SYSTEM", [
-        ("install [--no-sync] [--no-extensions]", "Idempotent setup: sync library, wire the Ghostty, Neovim, Alacritty, Kitty, foot (and opt-in tmux) hooks, rotation timer, GNOME extensions (dock, blur, tiling, rounded corners, user themes), desktop polish; enables what the running shell can load now.", ["theme install"]),
+        ("install [--no-sync] [--no-extensions]", "Idempotent setup: sync library, wire the Ghostty, Neovim, Alacritty, Kitty, foot and tmux hooks, rotation timer, GNOME extensions (dock, blur, tiling, rounded corners, user themes), desktop polish; enables what the running shell can load now.", ["theme install"]),
         ("activate", "Enable the GNOME extensions the running shell already knows and select the generated shell theme; says exactly which ones still need one login.", ["theme activate"]),
         ("extensions [--upstream]", "State of every curated extension. For one GNOME marks out of date, checks whether the author's repository already declares your GNOME release; --upstream installs that build (a plain extension tree copied in, schemas compiled — the author's own install steps). Loads at next login. GNOME's version check is never switched off.", ["theme extensions", "theme extensions --upstream"]),
-        ("target [on|off <name>]", "Choose what a switch may touch: wallpaper, shell, gtk, accent, icons, cursor, ghostty, alacritty, kitty, foot, tmux (opt-in), nvim, btop, browser, vscode, live.", ["theme targets", "theme target on tmux", "theme target off browser"]),
+        ("target [on|off <name>]", "Choose what a switch may touch: wallpaper, shell, gtk, accent, icons, cursor, ghostty, alacritty, kitty, foot, tmux, nvim, btop, browser, vscode, live, font.", ["theme targets", "theme target off tmux", "theme target off browser"]),
         ("uninstall [--purge]", "Reverse every hook, timer, overlay and setting this tool made; editor themes are restored; --purge also deletes the library and state.", ["theme uninstall"]),
         ("icons", "Print the icon + cursor package line for your package manager (pacman/yay/paru/apt/dnf).", ["theme icons"]),
         ("doctor [-v|--json]", "Environment + coverage report: distro, GNOME, hooks, extensions, timers, palettes.", ["theme doctor"]),
@@ -2874,7 +3143,7 @@ def cmd_help(topic=None):
                  ("gnome", "accent color from the theme's accent · color-scheme dark/light from its mode · fallback desktop color"),
                  ("icons", "the declared Yaru variant (-dark on dark themes), else Papirus with folders recolored to the accent · Bibata cursor: Ice on dark, Classic on light"),
                  ("terminals", "Ghostty include · Alacritty import · Kitty include · foot include — open windows recolor instantly over OSC; ctrl+shift+, makes new Ghostty windows match"),
-                 ("tmux", "opt-in (theme target on tmux): status line, borders, messages, copy mode; sourced live"),
+                 ("tmux", "status line in the palette (window tabs, prefix/zoom state, command, session, clock), borders, messages, copy mode, popups, menus — sourced live; your #(…) plugin hooks kept; theme tmux mine returns your own"),
                  ("nvim", "~/.config/colson-arch-theme/active-nvim.lua via the init.lua hook — declared colorscheme at VimEnter, canvas cleared to the terminal surface; every running Neovim re-themed over RPC"),
                  ("btop", "~/.config/btop/themes/<name>.theme + color_theme in btop.conf"),
                  ("browser", "Chromium / Chrome / Brave frame color from the theme — handed to the running browser, never launched"),
@@ -2924,6 +3193,9 @@ def cmd_about(as_json=False):
 
 
 def cmd_completions(shell):
+    shipped = SCRIPT.parent.parent / "completions" / f"theme.{shell}"   # the maintained script, when installed beside the binary
+    if shell in ("zsh", "bash", "fish") and shipped.exists():
+        return print(shipped.read_text(), end="")
     cmds = [(("theme " + n).split()[1] if n else "") for n, _, _ in COMMANDS]
     cmds = [c for c in cmds if c and not c.startswith("<")]
     if shell == "zsh":
@@ -3038,6 +3310,8 @@ def main(argv):
         return print(json.dumps({"active": active_name()}) if as_json else active_name())
     if c == "about":
         return cmd_about(as_json=as_json)
+    if c == "tmux":
+        return cmd_tmux(rest)
     return apply(c, "random" if (rest and rest[0] == "random") else "first")
 
 

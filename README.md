@@ -86,6 +86,7 @@ Prefer a native `pacman` package with no Node.js involved? Clone and `makepkg -s
 - [🎛️ What a Switch Changes](#what-a-switch-changes)
 - [⚡ Live Everywhere](#live-everywhere)
 - [🎚️ Targets](#targets)
+- [🪟 tmux — Your Bar or the Theme's](#tmux)
 - [📁 Icons, Folders and Cursor](#icons-folders-and-cursor)
 - [🖤 Graphite — The True-Black OS](#graphite)
 - [🌗 Day / Night](#day-night)
@@ -123,7 +124,7 @@ This project fixes that, and goes further than a color swap:
 | Icons | Yaru variant | Yaru variant, or **Papirus with every folder recolored to the accent** · Bibata cursor by light/dark |
 | Browser | Chromium theme color | Chromium / Chrome / Brave / Vivaldi / Edge frame color — handed to a running browser only |
 | Editors | Neovim (LazyVim) · VS Code with extension install | Neovim (any config) · VS Code / Cursor / VSCodium — only when the extension is already installed, restored by Graphite |
-| Multiplexer | — | tmux status line, borders, messages, copy mode (opt-in) |
+| Multiplexer | — | **tmux status line in the palette, plugin hooks kept; your own bar one command away** (`theme tmux mine`) |
 | Control | — | `theme targets` — choose what a switch may touch |
 | Picker | Super+Alt+Space menu | `theme pick` — fzf with a live palette preview card |
 | Extras | menu-driven | wallpaper rotation timer · day/night schedule · export/import · doctor · `--dry-run` |
@@ -134,9 +135,10 @@ This project fixes that, and goes further than a color swap:
 
 - ⚡ **Live everywhere** — open terminals recolor over OSC, running Neovims re-theme over RPC, tmux re-sources, the browser frame and editor follow; nothing to reload
 - 🎨 **OS-wide theming** — wallpaper (+dark, +lock screen), generated GNOME Shell theme, GTK4/GTK3 apps, accent color, light/dark mode, fallback desktop color, Ghostty / Alacritty / Kitty / foot, tmux, Neovim, btop
+- 🪟 **tmux, both ways** — the status line follows the palette (window tabs, prefix/zoom state, command, session, clock); `theme tmux mine` brings your own back this instant, the next switch brings the theme's back, <kbd>prefix</kbd> <kbd>T</kbd> toggles; tmux-continuum and every other `#(…)` hook keeps running
 - 📁 **Icons that follow the accent** — the declared Yaru variant, or Papirus with every folder recolored to the accent through a user-level overlay; Bibata cursor by light/dark
 - 🌐 **Browser and editor** — Chromium-family frame color while the browser runs; VS Code / Cursor / VSCodium theme when its extension is already installed, restored by Graphite
-- 🎚️ **Targets** — `theme targets` lists what a switch may touch; turn any layer off, or tmux on
+- 🎚️ **Targets** — `theme targets` lists what a switch may touch; turn any layer off
 - 🔨 **Forge** — `theme forge` renders original wallpapers from any theme's palette in eight engineering styles, deterministic and offline, 4K PNG
 - 🧬 **The Colson pack** — ten original themes: DEF CON's Las Vegas, hacker terminals, hyperscale, consensus, boardroom, Bay fog, golden hour, Cupertino light, red team
 - 🧠 **Generated, not hand-written** — every theme gets a GNOME Shell stylesheet and a libadwaita color sheet derived from its palette; coverage is total
@@ -170,7 +172,7 @@ This project fixes that, and goes further than a color swap:
 | **fzf** | `theme pick`, the live-preview picker | optional |
 | **librsvg** (`rsvg-convert`) | renders forged wallpapers to 4K PNG; without it GNOME uses the SVG directly | optional |
 | **uv** or **pipx** | installs the GNOME extension set (`gnome-extensions-cli`) | optional |
-| **Ghostty · Alacritty · Kitty · foot · tmux · Neovim · btop** | integrations — auto-detected, silently skipped when absent; tmux is opt-in | optional |
+| **Ghostty · Alacritty · Kitty · foot · tmux · Neovim · btop** | integrations — auto-detected, silently skipped when absent; `theme tmux mine` keeps your own tmux bar | optional |
 | **Chromium · Chrome · Brave · VS Code · Cursor · VSCodium** | browser frame color and editor theme — auto-detected | optional |
 | **Papirus / Yaru icons · adw-gtk-theme · Bibata cursor** | accent-colored folders, GTK3 coverage, cursor — `theme icons` prints the exact line | optional |
 
@@ -301,7 +303,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 | **GNOME** | accent color from the theme's accent · `color-scheme` from its mode · fallback desktop color behind the wallpaper and lock fade |
 | **Icons & cursor** | the declared Yaru variant (`-dark` on dark themes), else the variant nearest the accent; without Yaru, a Papirus overlay with every folder in the accent's color · Bibata Modern Ice on dark, Classic on light |
 | **Terminals** | Ghostty include · Alacritty `general.import` · Kitty `include` · foot `include` — one generated fragment each, and every **open** window recolors instantly over OSC; <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> makes **new** Ghostty windows match |
-| **tmux** | opt-in (`theme target on tmux`): status line, window tabs, pane borders, messages, copy mode — sourced live |
+| **tmux** | status line in the palette — window tabs with the current one as an accent block, `PREFIX` / `ZOOM` state, running command, session, clock, date — pane borders, messages, copy-mode matches, popups and menus, sourced live. Every `#(…)` command segment of your own status line (tmux-continuum's autosave, online-status, a battery script) is kept in front of the design. `theme tmux mine` brings your own bar back this instant, the next switch brings the theme's back, <kbd>prefix</kbd> <kbd>T</kbd> toggles |
 | **Neovim** | `active-nvim.lua` via a one-line hook in `init.lua` — the declared colorscheme at `VimEnter` when installed, the canvas (`Normal`, gutter, end-of-buffer, message area) cleared to the terminal surface whenever theme and editor agree on light/dark, re-aligned after any `:colorscheme` — and every running instance re-themed over RPC |
 | **btop** | theme file copied, `color_theme` set |
 | **Browser** | Chromium / Chrome / Brave / Vivaldi / Edge frame color through the browser's own `--set-theme-color`, only while it runs |
@@ -316,7 +318,7 @@ A switch does not leave you a list of things to reload. In about a second:
 |---|---|
 | Open terminals | OSC 4 (16 slots), 10, 11, 12 and 17 written to the pty of every shell a running terminal emulator owns — Ghostty, Kitty, Alacritty, foot, WezTerm, GNOME Console / Terminal, Ptyxis, Konsole, Tilix, Black Box, Rio, Contour, Warp. Graphite sends the reset forms, so each terminal returns to its own config |
 | Running Neovims | `nvim --server <socket> --remote-expr` re-runs the hook in every instance found under `$XDG_RUNTIME_DIR`. No keys are sent; insert mode is never disturbed |
-| tmux | `tmux source-file` of the generated theme (when the tmux target is on) |
+| tmux | `tmux source-file` of the generated fragment; `theme tmux mine` unsets exactly what it set and re-sources your own `tmux.conf` |
 | GNOME Shell | User Themes switches stylesheets live |
 | Browser | the browser's own IPC applies the frame color to the running instance |
 | Editors | VS Code and Cursor watch `settings.json` and re-theme themselves |
@@ -326,12 +328,12 @@ What still needs a moment of yours: a **new** Ghostty window uses the config Gho
 <a id="targets"></a>
 ## 🎚️ Targets
 
-Every layer is a target you can switch off — or on, for the opt-in ones. Nothing else changes; `theme <name>` simply skips what you turned off.
+Every layer is a target you can switch off. Nothing else changes; `theme <name>` simply skips what you turned off.
 
 ```shell
 theme targets                 # the list, with on/off and what each one touches
 theme target off browser      # never touch the browser frame
-theme target on tmux          # theme the tmux status line too (then: theme install, theme <name>)
+theme target off tmux         # never touch tmux (theme tmux mine keeps your own bar while everything else follows)
 ```
 
 | Target | Default | Touches |
@@ -343,13 +345,31 @@ theme target on tmux          # theme the tmux status line too (then: theme inst
 | `icons` | on | Yaru variant, or Papirus with accent-colored folders |
 | `cursor` | on | Bibata Ice on dark, Classic on light |
 | `ghostty` · `alacritty` · `kitty` · `foot` | on | that terminal's palette fragment |
-| `tmux` | **off** | status line, borders, messages, copy mode — your own status design wins by default |
+| `tmux` | on | status line, borders, messages, copy mode, popups, menus — `theme tmux mine` returns your own at any time |
 | `nvim` | on | Neovim hook |
 | `btop` | on | btop theme |
 | `browser` | on | Chromium-family frame color, running browsers only |
 | `vscode` | on | VS Code-family `workbench.colorTheme`, only when the extension is installed |
 | `live` | on | the instant recolor pass |
 | `font` | on | system and shell font: JetBrains Mono for themes that declare `font = "mono"`, the GNOME default otherwise |
+
+<a id="tmux"></a>
+## 🪟 tmux — Your Bar or the Theme's
+
+The theme's status line keeps the layout of a good minimal bar and takes every color from the palette: window tabs on the left with the current one as an accent block, then `PREFIX` and `ZOOM` state, the running command, the session, clock and date on the right. Pane borders, messages, copy-mode matches, popups and menus follow. Every `#(…)` command segment of your own status line — tmux-continuum's autosave hook, online-status, a battery script — is kept in front of the theme's design, so your plugins keep running under it.
+
+Your own bar is never lost:
+
+```shell
+theme tmux                    # which one is on screen, the hook, the server, the toggle key
+theme tmux mine               # your own status line, this instant — until the next theme switch
+theme tmux theme              # the active theme's status line again
+theme tmux toggle             # flip — also on prefix T, unless that key is already bound in your tmux.conf
+theme tmux key F12            # move the toggle (theme tmux key off removes it)
+theme target off tmux         # never touch tmux at all
+```
+
+`mine` unsets exactly the options the fragment set and re-sources your `tmux.conf`, so your bar comes back the way your config makes it, plugins included. `theme graphite` does the same — Graphite is your own configuration, everywhere. Your `tmux.conf` gets one `source-file` line; `theme uninstall` removes it and restores your bar live.
 
 <a id="icons-folders-and-cursor"></a>
 ## 📁 Icons, Folders and Cursor
@@ -367,7 +387,7 @@ theme icons        # prints the package line: Papirus + Yaru icons, adw-gtk3, Bi
 theme graphite && theme wall futurism
 ```
 
-Pure `#000000` surfaces, crisp `#edeef1` text, white accent — across the shell, every GTK app, the terminals, the Neovim canvas, the browser frame, white folders on Papirus, and tmux when it is a target; editor themes go back to yours. The wallpaper is left alone, so the doctrine and the eye candy don't have to fight: a monochrome OS under a cinematic wallpaper.
+Pure `#000000` surfaces, crisp `#edeef1` text, white accent — across the shell, every GTK app, the terminals, the Neovim canvas, the browser frame, white folders on Papirus; editor themes and your own tmux status line go back to yours. The wallpaper is left alone, so the doctrine and the eye candy don't have to fight: a monochrome OS under a cinematic wallpaper.
 
 <a id="day-night"></a>
 ## 🌗 Day / Night
@@ -510,13 +530,13 @@ theme <name>                                  every step gated by `theme targets
   ├─ gtk_apply()         shipped gtk.css  →  or gtk_generate(): libadwaita @define-color sheet · adw-gtk3 by mode
   ├─ icons_apply()       Yaru variant  →  or papirus_overlay(): ~/.local/share/icons/<overlay>/ with accent folders
   ├─ cursor_apply()      Bibata by mode
-  ├─ fragments           ghostty · alacritty · kitty · foot · tmux (opt-in)
+  ├─ fragments           ghostty · alacritty · kitty · foot · tmux_write(): the theme's status line, or yours (theme tmux)
   ├─ nvim_hook_write()   ~/.config/colson-arch-theme/active-nvim.lua
   ├─ forge_render()      palette → SVG (8 styles) → rsvg-convert → 4K PNG, into _forge/<name>/backgrounds (theme forge)
   ├─ browsers_apply()    --set-theme-color to running Chromium-family browsers
   ├─ editors_apply()     workbench.colorTheme where the extension is installed
   ├─ state               ~/.config/colson-arch-theme/active
-  └─ live                terminals_live() OSC → nvim_live() RPC → tmux_live()
+  └─ live                terminals_live() OSC → nvim_live() RPC → tmux_live() / tmux_restore()
 ```
 
 - **One dependency-free Python file** (`bin/theme`) ships identically via npm, the PKGBUILD, and a git clone — no runtime, no framework, nothing to break.
@@ -535,7 +555,7 @@ These are the laws this project is engineered around — the reason it can live 
 4. **Themes are never vendored.** 5.5 GB and 111 authors' licenses stay where they belong — `theme sync` clones, `theme credits` credits.
 5. **Monochrome chrome.** Color appears only where color *is* the information — the swatches.
 6. **No network surprises.** The only network activity is `git clone` / `git pull` of the repositories you asked for. No telemetry, no update checks, no pipe-to-shell.
-7. **Nothing runs behind your back.** Browsers are never launched to be recolored, editor extensions are never installed, tmux is opt-in, and every layer can be switched off.
+7. **Nothing runs behind your back.** Browsers are never launched to be recolored, editor extensions are never installed, your own tmux status line is one command away (`theme tmux mine`), and every layer can be switched off.
 
 <a id="compatibility"></a>
 ## 🐧 Compatibility
@@ -562,7 +582,7 @@ pacman path: pull the clone and rebuild — `git pull && makepkg -si`.
 
 ```shell
 theme uninstall             # reverses every hook (Ghostty, Neovim, Alacritty, Kitty, foot, tmux), timers, GTK overrides,
-                            # the icon overlay and the gtk/icon/cursor settings; restores editor themes; keeps the library
+                            # the icon overlay and the gtk/icon/cursor settings; restores editor themes and your tmux bar; keeps the library
 theme uninstall --purge     # also removes the library and state
 ```
 
@@ -582,6 +602,7 @@ Then drop the binary the way it came in: `npm uninstall -g colson-arch-theme` on
 | Browser frame did not change | The color is handed only to a running browser, never to a launched one; switch again while it runs, or leave it on the next switch |
 | Editor theme did not change | The bundle's extension is not installed in that editor, and nothing is ever installed for you; the report says so by name |
 | I don't want a layer touched | `theme target off <name>` — see [Targets](#targets) |
+| I want my own tmux bar back, now | `theme tmux mine` — it returns live, plugins included; the next switch brings the theme's bar back, <kbd>prefix</kbd> <kbd>T</kbd> toggles, `theme target off tmux` opts out for good |
 | Ghostty still shows the old palette | Ghostty re-reads its config only on reload — press <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>,</kbd> once; new windows do not pick it up on their own |
 | Neovim looks boxed inside the terminal, or the tmux bar stops short of the edges | Ghostty paints its window padding, and the leftover strip when the cell height does not divide the window height, in the window background color. For an edge-to-edge grid set `window-padding-x = 0` and `window-padding-y = 0`, then pick `adjust-cell-height` so the cell height divides your screen height exactly (on a 1080px screen, a 24px cell gives 45 rows), and restart Ghostty — padding changes apply to new windows only. `window-padding-color = extend` is the alternative, but it stretches whatever sits at the edge, a colored tmux tab included |
 | GTK3 apps ignore the theme | Install `adw-gtk-theme` — it makes GTK3 apps read the same color sheet GTK4 apps do |
