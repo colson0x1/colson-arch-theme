@@ -273,7 +273,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 | **Apply** | `theme <name> [random]` · `theme random` · `theme next` · `theme graphite` |
 | **Wallpaper** | `theme wall <name\|random>` · `theme next-wall` · `theme rotate <min\|off>` · `theme schedule set HH:MM=theme …` |
 | **Library** | `theme sync [--official]` · `theme add <git-url> [name]` · `theme update` · `theme remove <name>` · `theme credits` |
-| **System** | `theme install [--no-sync] [--no-extensions]` · `theme activate` · `theme targets` / `theme target on\|off <name>` · `theme uninstall [--purge]` · `theme icons` · `theme doctor [-v\|--json]` · `theme export` / `theme import <file>` · `theme completions <zsh\|bash\|fish>` |
+| **System** | `theme install [--no-sync] [--no-extensions]` · `theme activate` · `theme extensions [--upstream]` · `theme targets` / `theme target on\|off <name>` · `theme uninstall [--purge]` · `theme icons` · `theme doctor [-v\|--json]` · `theme export` / `theme import <file>` · `theme completions <zsh\|bash\|fish>` |
 | **Info** | `theme current [--json]` · `theme about [--json]` · `theme version` · `theme help [command]` |
 
 `theme help` is a full manual with grouped sections; `theme help <command>` is a deep-dive with examples. Bare `theme` prints the status dashboard: active theme, wallpaper, rotation, schedule, library size.
@@ -383,7 +383,7 @@ theme wall moodpeak       # one from a specific theme's set
 <a id="the-gnome-layer"></a>
 ## 🧩 The GNOME Layer
 
-`theme install` sets up nine extensions through `gnome-extensions-cli`, installed on demand with `uv` or `pipx`, and enables every one the running shell can already load. GNOME learns about newly installed extension folders only at login, and an extension whose metadata does not list your GNOME release stays out of date until its author updates it; `theme activate` and `theme doctor` report both cases by name. Skip the whole layer with `theme install --no-extensions`.
+`theme install` sets up nine extensions through `gnome-extensions-cli`, installed on demand with `uv` or `pipx`, and enables every one the running shell can already load. GNOME learns about newly installed extension folders only at login, and it refuses an extension whose metadata does not list your GNOME release. Authors often support a new release on their default branch weeks before it reaches extensions.gnome.org, so `theme extensions` checks the author's repository for each out-of-date extension, and `theme extensions --upstream` installs that build when it is a plain extension tree: the tree is copied in and its schemas compiled, exactly what the author's own install does, nothing from the repository is run, and GNOME's version check is never switched off. `theme activate` and `theme doctor` report both cases by name. Skip the whole layer with `theme install --no-extensions`.
 
 | Extension | Role |
 |---|---|
@@ -519,6 +519,7 @@ Then drop the binary the way it came in: `npm uninstall -g colson-arch-theme` on
 |---|---|
 | `theme: command not found` after `npm i -g` | npm's global bin directory is not on your `PATH` — `export PATH="$(npm prefix -g)/bin:$PATH"` in your shell rc |
 | Top bar / overview did not recolor | Run `theme activate` — it enables User Themes when GNOME has already loaded it and names the extensions that still need one logout. After the login, apply the theme once more |
+| An extension is "out of date" | GNOME refuses a build whose metadata does not list its release. `theme extensions` shows whether the author's repository already declares yours; `theme extensions --upstream` installs that build and it loads at the next login. If the author has not caught up either, it is genuinely waiting on them |
 | Icons, folders or cursor did not change | No icon or cursor pack is installed; `theme icons` prints the package line. Folder recoloring needs Papirus, the cursor needs Bibata, GTK3 coverage needs `adw-gtk3` |
 | Browser frame did not change | The color is handed only to a running browser, never to a launched one; switch again while it runs, or leave it on the next switch |
 | Editor theme did not change | The bundle's extension is not installed in that editor, and nothing is ever installed for you; the report says so by name |

@@ -1063,6 +1063,120 @@ def extension_states():
     return out
 
 
+# ─────────────────────────────── extensions: state + upstream builds ─────────
+def shell_major():
+    r = subprocess.run(["gnome-shell", "--version"], capture_output=True, text=True)
+    m = re.search(r"(\d+)", r.stdout or "")
+    return m.group(1) if m else ""
+
+
+def ext_meta(uuid):
+    f = EXT_DIR / uuid / "metadata.json"
+    try:
+        return json.loads(f.read_text()) if f.exists() else {}
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+
+
+def upstream_raw_urls(url):
+    """metadata.json on the default branch of a GitHub or GNOME GitLab repository — only those two hosts."""
+    url = url.rstrip("/").removesuffix(".git")
+    m = re.fullmatch(r"https://github\.com/([\w.-]+)/([\w.-]+)", url)
+    if m:
+        return [(f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{b}/metadata.json", b) for b in ("main", "master")]
+    m = re.fullmatch(r"https://gitlab\.gnome\.org/([\w.-]+)/([\w.-]+)", url)
+    if m:
+        return [(f"{url}/-/raw/{b}/metadata.json", b) for b in ("main", "master")]
+    return []
+
+
+def upstream_probe(url):
+    """→ (version, shell_versions, branch) from the author's repository, or None. Read-only, six seconds at most."""
+    import urllib.request
+    for raw, branch in upstream_raw_urls(url):
+        try:
+            with urllib.request.urlopen(raw, timeout=6) as r:
+                d = json.loads(r.read().decode())
+            return d.get("version"), [str(v) for v in d.get("shell-version", [])], branch
+        except Exception:
+            continue
+    return None
+
+
+def upstream_install(uuid, url, branch):
+    """Install the author's own build from the repository: a plain extension tree (metadata.json and extension.js at
+    the root) is copied into the user extensions directory and its schemas are compiled — the same steps the
+    author's Makefile performs. Nothing from the repository is run by this tool. → None, or a reason it did not."""
+    import tempfile
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"{APP}-ext-"))
+    src = tmp / "src"
+    try:
+        r = subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", branch, url, str(src)],
+                           capture_output=True, text=True, timeout=180)
+        if r.returncode != 0:
+            return "clone failed"
+        if not (src / "metadata.json").exists() or not (src / "extension.js").exists():
+            return "not a plain extension tree — it needs the author's build step"
+        meta = json.loads((src / "metadata.json").read_text())
+        if meta.get("uuid") != uuid:
+            return f"uuid mismatch ({meta.get('uuid')})"
+        if shell_major() not in [str(v) for v in meta.get("shell-version", [])]:
+            return f"upstream does not declare GNOME {shell_major()}"
+        schemas = src / "schemas"
+        if schemas.is_dir() and list(schemas.glob("*.gschema.xml")) and shutil.which("glib-compile-schemas"):
+            subprocess.run(["glib-compile-schemas", "--strict", f"--targetdir={schemas}", str(schemas)], capture_output=True)
+        dest = EXT_DIR / uuid
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".git", ".github", ".gitignore", ".gitattributes"))
+        return None
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        return e.__class__.__name__
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def cmd_extensions(upstream=False, plain=False):
+    """Every curated extension: state, installed version, declared GNOME releases — and for the ones GNOME marks
+    out of date, whether the author's repository already declares this release (--upstream installs that build)."""
+    states, major = extension_states(), shell_major()
+    rows = []
+    for uuid, _ in EXTENSIONS:
+        meta, st = ext_meta(uuid), states.get(uuid, "missing")
+        declared = [str(v) for v in meta.get("shell-version", [])]
+        ver, note = str(meta.get("version", "-")), ""
+        stale = st.upper().startswith("OUT OF DATE") or (bool(meta) and bool(major) and major not in declared)
+        if stale:
+            url = str(meta.get("url", ""))
+            probe = upstream_probe(url) if url else None
+            if probe and major in probe[1]:
+                if not upstream:
+                    note = f"upstream declares GNOME {major} (v{probe[0]}, not on extensions.gnome.org yet)  → theme extensions --upstream"
+                elif DRY:
+                    note = f"[dry-run] install v{probe[0]} from {url} ({probe[2]})"
+                else:
+                    err = upstream_install(uuid, url, probe[2])
+                    note = f"installed v{probe[0]} from the author's repository — loads at next login" if not err else f"upstream install failed: {err}"
+            elif probe:
+                note = f"upstream (v{probe[0]}) declares GNOME {', '.join(probe[1])} only — waiting for the author"
+            else:
+                note = "no upstream metadata reachable — waiting for the author"
+        rows.append((uuid.split("@")[0], st, ver, ",".join(declared) or "-", note))
+    if plain:
+        for r in rows:
+            print("\t".join(r))
+        return
+    print()
+    print(f" {B('extensions')}   {D('GNOME ' + (major or '?') + ' · the curated desktop layer')}")
+    print(f" {rule()}")
+    for name, st, ver, declared, note in rows:
+        print(f"   {name:<26} {st:<13} {('v' + ver):<6} {D(('gnome ' + declared).ljust(18))} {note}")
+    print()
+    print(f"   {D('not loaded = installed after this login (GNOME reads new folders at login) · out of date = GNOME refuses a build that does not declare its release')}")
+    print()
+    credit()
+
+
 # ─────────────────────────────── generation: shell + gtk ─────────────────────
 def _mix(a, b, t):
     ra, ga, ba = _rgb(a)
@@ -1914,7 +2028,7 @@ def cmd_activate():
         print(f"   {D('after login'.ljust(12))} {len(pending)}  {D(short(pending))}")
         print(f"   {'':<12} {B('log out and back in once')} {D('— GNOME only discovers new extension folders at login')}")
     if stale:
-        print(f"   {D('out of date'.ljust(12))} {short(stale)}  {D('waiting for the author to support this GNOME release')}")
+        print(f"   {D('out of date'.ljust(12))} {short(stale)}  {D('GNOME refuses a build that does not declare its release')}  → theme extensions")
     if not pending and not stale:
         print(f"   {D('everything the desktop layer needs is loaded; shell theme:')} theme-{active_name()}")
     print()
@@ -2012,7 +2126,7 @@ def cmd_doctor(verbose=False, as_json=False):
     if n_pending:
         ext_line += f" · {n_pending} load at next login"
     if n_stale:
-        ext_line += f" · out of date: {', '.join(n_stale)}"
+        ext_line += f" · out of date: {', '.join(n_stale)}  " + D("→ theme extensions")
     if n_missing:
         ext_line += f" · {n_missing} missing  " + D("→ theme install")
     if n_pending:
@@ -2149,6 +2263,7 @@ GROUPS = [
     ("SYSTEM", [
         ("install [--no-sync] [--no-extensions]", "Idempotent setup: sync library, wire the Ghostty, Neovim, Alacritty, Kitty, foot (and opt-in tmux) hooks, rotation timer, GNOME extensions (dock, blur, tiling, rounded corners, user themes), desktop polish; enables what the running shell can load now.", ["theme install"]),
         ("activate", "Enable the GNOME extensions the running shell already knows and select the generated shell theme; says exactly which ones still need one login.", ["theme activate"]),
+        ("extensions [--upstream]", "State of every curated extension. For one GNOME marks out of date, checks whether the author's repository already declares your GNOME release; --upstream installs that build (a plain extension tree copied in, schemas compiled — the author's own install steps). Loads at next login. GNOME's version check is never switched off.", ["theme extensions", "theme extensions --upstream"]),
         ("target [on|off <name>]", "Choose what a switch may touch: wallpaper, shell, gtk, accent, icons, cursor, ghostty, alacritty, kitty, foot, tmux (opt-in), nvim, btop, browser, vscode, live.", ["theme targets", "theme target on tmux", "theme target off browser"]),
         ("uninstall [--purge]", "Reverse every hook, timer, overlay and setting this tool made; editor themes are restored; --purge also deletes the library and state.", ["theme uninstall"]),
         ("icons", "Print the icon + cursor package line for your package manager (pacman/yay/paru/apt/dnf).", ["theme icons"]),
@@ -2353,6 +2468,8 @@ def main(argv):
         return cmd_uninstall(purge="--purge" in rest)
     if c == "activate":
         return cmd_activate()
+    if c == "extensions":
+        return cmd_extensions(upstream="--upstream" in rest, plain=plain)
     if c in ("target", "targets"):
         return cmd_target(rest)
     if c == "icons":

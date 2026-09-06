@@ -196,4 +196,6 @@ for k in ("gtk-theme", "icon-theme", "cursor-theme"):
 assert "reset org.gnome.shell.extensions.dash-to-dock custom-background-color" in log and "org.gnome.shell.extensions.user-theme name " in log
 print("uninstall: every file back to how it was, overlays gone, settings + dock reset — OK")
 EOF
+n=$("$T" extensions --plain | wc -l); [ "$n" -eq 9 ] || { echo "extensions --plain: expected 9 rows, got $n"; exit 1; }
+echo "extensions: 9 rows offline — OK"
 echo "isolated suite: all green"

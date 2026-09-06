@@ -13,6 +13,9 @@ The app grid, the overview canvas and the dock now actually take the theme.
 - Shell selectors are GNOME 45–50's real ones: the overview canvas (`#overviewGroup`), app grid tiles (`.overview-tile`), folders, running dots (`.app-grid-running-dot`), page dots, `#dash .dash-background`, dialog and notification buttons. 1.1.0's rules targeted class names that no longer exist, so the app grid still looked stock. The `@import` of a stylesheet resource GNOME 47+ no longer ships is gone; GNOME keeps its own stylesheet loaded underneath a user theme regardless.
 - Icon and theme lookup follows `XDG_DATA_DIRS` instead of assuming `/usr/share`, and the isolated test suite is isolated from the system's icon and theme directories.
 
+### Added
+- `theme extensions [--upstream]`. GNOME refuses an extension whose metadata does not declare the running release. For each curated extension in that state, the command reads the author's repository URL from the extension's own metadata, checks whether the default branch already declares your GNOME release, and with `--upstream` installs that build — a plain extension tree copied into place with its schemas compiled, the author's own install steps. Nothing from the repository is run, and GNOME's version check is never switched off.
+
 ### Changed
 - dash-to-dock follows the palette: its surface takes the theme background and its running dots the accent; both reset on uninstall.
 - Re-applying the active theme reloads the rewritten shell stylesheet at once (User Themes only re-reads on a name change, so the name is bounced).
