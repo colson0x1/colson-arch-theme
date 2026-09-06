@@ -1,4 +1,6 @@
 # colson theme library manifest — name <space> git-url (official bundle: https://github.com/omacom/omarchy → themes/)
+# collections — cloned as _<name>; every themes/* inside is a bundle
+_colson https://github.com/colson0x1/colson-theme-pack
 aetheria https://github.com/JJDizz1L/aetheria
 amberbyte https://github.com/tahfizhabib/omarchy-amberbyte-theme
 arc-blueberry https://github.com/vale-c/omarchy-arc-blueberry
