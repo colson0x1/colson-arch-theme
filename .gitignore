@@ -4,3 +4,6 @@ node_modules/
 *.tar.gz
 *.log
 .DS_Store
+src/
+pkg/
+*.pkg.tar.*

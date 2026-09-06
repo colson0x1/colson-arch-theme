@@ -1,8 +1,8 @@
 # Maintainer: Colson (@colson0x1)
 pkgname=colson-arch-theme
-pkgver=1.0.0
+pkgver=1.2.0
 pkgrel=1
-pkgdesc="Omarchy-grade theming for GNOME on Arch — 133 themes, live across GNOME Shell, GTK, icons, cursor, terminals, tmux, Neovim, btop, browser and editors"
+pkgdesc="Omarchy-grade theming for GNOME on Arch — 143 themes incl. the original Colson pack, wallpapers forged from any palette, live across GNOME Shell, GTK, icons, cursor, terminals, tmux, Neovim, btop, browser and editors"
 arch=('any')
 url="https://github.com/colson0x1/colson-arch-theme"
 license=('MIT')
@@ -16,13 +16,14 @@ optdepends=('fzf: interactive picker (theme pick)'
             'ghostty: terminal palette integration'
             'neovim: colorscheme hook'
             'btop: btop theme sync'
+            'librsvg: theme forge renders wallpapers to 4K PNG'
             'uv: installs the GNOME extension set via gext'
             'papirus-icon-theme: icon theme fallback'
             'yaru-icon-theme: per-theme icon variants'
             'adw-gtk-theme: GTK3 apps follow the theme'
             'bibata-cursor-theme: cursor theme')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('d8dab8613474c8ea89f43a240084bd9608074e78cc3f746b6eb8f33bfbfd099b')
+sha256sums=('57c2f5112a45d5b1427300a63320be126ad592bb0a6cda93b2ad73587e8ac324')
 
 package() {
   cd "$pkgname-$pkgver"
