@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-09-06
+
+### Fixed
+- `theme update` pulled every repository in the library one after another, in silence, with no timeout and nothing stopping git from asking for credentials on a terminal — a large library looked hung for minutes, and a repository that had gone private would have hung it for real. It now pulls in parallel, never prompts, gives each repository two minutes, prints what it is doing and names the repositories it could not update.
+
 ## [1.3.0] — 2026-09-06
 
 The tmux status line follows the theme, and your own is one command away.
