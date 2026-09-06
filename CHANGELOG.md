@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-09-06
+
+The app grid, the overview canvas and the dock now actually take the theme.
+
+### Fixed
+- Shell selectors are GNOME 45–50's real ones: the overview canvas (`#overviewGroup`), app grid tiles (`.overview-tile`), folders, running dots (`.app-grid-running-dot`), page dots, `#dash .dash-background`, dialog and notification buttons. 1.1.0's rules targeted class names that no longer exist, so the app grid still looked stock. The `@import` of a stylesheet resource GNOME 47+ no longer ships is gone; GNOME keeps its own stylesheet loaded underneath a user theme regardless.
+- Icon and theme lookup follows `XDG_DATA_DIRS` instead of assuming `/usr/share`, and the isolated test suite is isolated from the system's icon and theme directories.
+
+### Changed
+- dash-to-dock follows the palette: its surface takes the theme background and its running dots the accent; both reset on uninstall.
+- Re-applying the active theme reloads the rewritten shell stylesheet at once (User Themes only re-reads on a name change, so the name is bounced).
+
 ## [1.1.0] — 2026-09-05
 
 The whole desktop turns at once, and it turns live.
@@ -23,8 +35,6 @@ The whole desktop turns at once, and it turns live.
 - GNOME fallback desktop color follows the theme, so the lock fade and any wallpaper gap match.
 
 ### Changed
-- dash-to-dock follows the palette: its surface takes the theme background and its running dots the accent; both reset on uninstall.
-- Re-applying the active theme reloads the rewritten shell stylesheet at once (User Themes only re-reads on a name change, so the name is bounced).
 - The GNOME Shell stylesheet covers far more of the shell: translucent glass surfaces with depth, quick settings toggles and sliders, calendar, notifications, OSD, dash, app grid, search results, workspace indicator, window switcher, dialogs, switches, scrollbars, lock and login. The stock stylesheet stays authoritative for layout.
 - The switch report is grouped: desktop, terminals, editors, browser, live.
 - `theme install` reports hooks for every terminal and enables whatever the running shell can load now; `theme doctor` shows extension states, terminals and hooks, live targets, browsers, editors and which icon packs are missing.
@@ -32,7 +42,6 @@ The whole desktop turns at once, and it turns live.
 
 ### Fixed
 - Color matching for icon variants and folder colors judges colorfulness by RGB chroma, so near-black and pale accents map to the right family.
-- Shell selectors are GNOME 45–50's real ones: the overview canvas (`#overviewGroup`), app grid tiles (`.overview-tile`), folders, running dots (`.app-grid-running-dot`), page dots, `#dash .dash-background`, dialog and notification buttons. Earlier rules targeted class names that no longer exist, which is why the app grid looked stock. The `@import` of a stylesheet resource GNOME 47+ no longer ships is gone; GNOME keeps its own stylesheet loaded underneath a user theme regardless.
 
 ## [1.0.2] — 2026-09-05
 
@@ -69,7 +78,8 @@ Initial release.
 - **`--dry-run`** on every state-changing command; every error path exits non-zero with a one-line message, never a traceback.
 - **Packaging** — npm (`colson-arch-theme`), PKGBUILD for pacman-native installs, from-source installer.
 
-[Unreleased]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/colson0x1/colson-arch-theme/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/colson0x1/colson-arch-theme/compare/v1.0.0...v1.0.1
