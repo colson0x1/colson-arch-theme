@@ -23,6 +23,8 @@ The whole desktop turns at once, and it turns live.
 - GNOME fallback desktop color follows the theme, so the lock fade and any wallpaper gap match.
 
 ### Changed
+- dash-to-dock follows the palette: its surface takes the theme background and its running dots the accent; both reset on uninstall.
+- Re-applying the active theme reloads the rewritten shell stylesheet at once (User Themes only re-reads on a name change, so the name is bounced).
 - The GNOME Shell stylesheet covers far more of the shell: translucent glass surfaces with depth, quick settings toggles and sliders, calendar, notifications, OSD, dash, app grid, search results, workspace indicator, window switcher, dialogs, switches, scrollbars, lock and login. The stock stylesheet stays authoritative for layout.
 - The switch report is grouped: desktop, terminals, editors, browser, live.
 - `theme install` reports hooks for every terminal and enables whatever the running shell can load now; `theme doctor` shows extension states, terminals and hooks, live targets, browsers, editors and which icon packs are missing.
@@ -30,6 +32,7 @@ The whole desktop turns at once, and it turns live.
 
 ### Fixed
 - Color matching for icon variants and folder colors judges colorfulness by RGB chroma, so near-black and pale accents map to the right family.
+- Shell selectors are GNOME 45–50's real ones: the overview canvas (`#overviewGroup`), app grid tiles (`.overview-tile`), folders, running dots (`.app-grid-running-dot`), page dots, `#dash .dash-background`, dialog and notification buttons. Earlier rules targeted class names that no longer exist, which is why the app grid looked stock. The `@import` of a stylesheet resource GNOME 47+ no longer ships is gone; GNOME keeps its own stylesheet loaded underneath a user theme regardless.
 
 ## [1.0.2] — 2026-09-05
 

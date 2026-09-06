@@ -286,7 +286,7 @@ mkdir -p ~/.config/fish/completions && theme completions fish > ~/.config/fish/c
 | Layer | Mechanism |
 |---|---|
 | **Wallpaper** | GNOME `picture-uri` + `picture-uri-dark` + lock screen, zoom-fit |
-| **GNOME Shell** | `~/.themes/theme-<name>/gnome-shell/gnome-shell.css` generated from the palette — top bar, overview, quick settings, popups, notifications, search, lock — loaded via User Themes |
+| **GNOME Shell** | `~/.themes/theme-<name>/gnome-shell/gnome-shell.css` generated from the palette — top bar, the overview canvas behind the app grid, app tiles, folders and running dots, dash and dash-to-dock, quick settings, menus, calendar, notifications, dialogs, switcher, lock — loaded via User Themes and reloaded on every switch |
 | **GTK apps** | the theme's `gtk.css` when shipped, otherwise a generated libadwaita sheet (`window`, `view`, `headerbar`, `sidebar`, `card`, `popover`, `accent`, `success`, `warning`, `error`) into `gtk-4.0` + `gtk-3.0` · `adw-gtk3` / `adw-gtk3-dark` selected by mode when installed |
 | **GNOME** | accent color from the theme's accent · `color-scheme` from its mode · fallback desktop color behind the wallpaper and lock fade |
 | **Icons & cursor** | the declared Yaru variant (`-dark` on dark themes), else the variant nearest the accent; without Yaru, a Papirus overlay with every folder in the accent's color · Bibata Modern Ice on dark, Classic on light |
@@ -449,7 +449,7 @@ theme import ~/theme-setup.json                                       # restore 
 theme <name>                                  every step gated by `theme targets`
   ├─ terminal_colors()   colors.toml (both dialects) → ghostty.conf → alacritty.toml → kitty.conf   whitelist extraction
   ├─ set_wall()          gsettings picture-uri · picture-uri-dark · screensaver · primary-color
-  ├─ shell_apply()       ~/.themes/theme-<name>/gnome-shell/gnome-shell.css   (@import stock resource, override colors)
+  ├─ shell_apply()       ~/.themes/theme-<name>/gnome-shell/gnome-shell.css   (layered over the stock sheet) · dock_apply() dash-to-dock colors
   ├─ gtk_apply()         shipped gtk.css  →  or gtk_generate(): libadwaita @define-color sheet · adw-gtk3 by mode
   ├─ icons_apply()       Yaru variant  →  or papirus_overlay(): ~/.local/share/icons/<overlay>/ with accent folders
   ├─ cursor_apply()      Bibata by mode
@@ -462,7 +462,7 @@ theme <name>                                  every step gated by `theme targets
 ```
 
 - **One dependency-free Python file** (`bin/theme`) ships identically via npm, the PKGBUILD, and a git clone — no runtime, no framework, nothing to break.
-- The shell theme uses the `@import url("resource:///org/gnome/shell/theme/gnome-shell.css")` technique: the stock stylesheet stays authoritative for layout; only colors are overridden. If GNOME ever rejects a generated sheet, it falls back to stock. Nothing breaks.
+- GNOME always keeps its own stylesheet loaded underneath a user theme, so the generated sheet only layers the palette's color, translucency and depth on top, written against GNOME 45–50's real selectors: `#overviewGroup` for the app grid canvas, `.overview-tile` for app icons, `.app-folder`, `.app-grid-running-dot`, `#dash .dash-background`, the quick settings, menus, dialogs, lock. A rule the shell rejects is dropped, never fatal. dash-to-dock takes the theme background for its surface and the accent for its running dots.
 - XDG paths throughout: library in `$XDG_DATA_HOME/colson-arch-theme/themes`, state in `$XDG_CONFIG_HOME/colson-arch-theme`, generated shell themes in `~/.themes/theme-<name>/`.
 - Everything runs as your user: `gsettings`, `systemctl --user`, files under `$HOME`. Nothing touches `/` except the pacman package itself.
 

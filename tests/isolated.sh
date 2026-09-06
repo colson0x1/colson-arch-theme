@@ -12,12 +12,13 @@ FAKE="$(mktemp -d "${TMPDIR:-/tmp}/colson-arch-theme-test.XXXXXX")"
 cleanup() { python3 -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$FAKE"; }
 trap cleanup EXIT
 export FAKE
-export HOME="$FAKE" XDG_CONFIG_HOME="$FAKE/.config" XDG_DATA_HOME="$FAKE/.local/share" XDG_RUNTIME_DIR="$FAKE/run"
+export HOME="$FAKE" XDG_CONFIG_HOME="$FAKE/.config" XDG_DATA_HOME="$FAKE/.local/share" XDG_RUNTIME_DIR="$FAKE/run" XDG_DATA_DIRS="$FAKE/usr/share"
 export PATH="$FAKE/bin:$PATH" NO_COLOR=1 PYTHONDONTWRITEBYTECODE=1
 
 mkdir -p "$FAKE/bin" "$FAKE/run" "$FAKE/.config"/{alacritty,kitty,foot,tmux,ghostty,nvim,"Cursor/User"} \
          "$FAKE/.local/share/colson-arch-theme/themes/_omarchy/themes" "$FAKE/.cursor/extensions/catppuccin.catppuccin-vsc-3.17.0" \
-         "$FAKE/.local/share/icons" "$FAKE/.local/share/themes/adw-gtk3-dark" "$FAKE/.local/share/themes/adw-gtk3"
+         "$FAKE/.local/share/icons" "$FAKE/.local/share/themes/adw-gtk3-dark" "$FAKE/.local/share/themes/adw-gtk3" "$FAKE/usr/share/icons" \
+         "$FAKE/.local/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com/schemas" "$FAKE/.local/share/gnome-shell/extensions/user-theme@gnome-shell-extensions.gcampax.github.com/schemas"
 
 # ── stubs ──────────────────────────────────────────────────────────────────────
 stub() { printf '#!/usr/bin/env bash\n%s\n' "$2" > "$FAKE/bin/$1"; chmod +x "$FAKE/bin/$1"; }
@@ -140,7 +141,12 @@ for needle in ("icon-theme colson-arch-theme-papirus-blue-dark", "cursor-theme B
     assert needle in log, needle
 assert log.count("nvim --server") == 2 and "--remote-expr execute('luafile" in log
 css = (F / ".themes/theme-mocha/gnome-shell/gnome-shell.css").read_text()
-assert css.startswith('@import url("resource:///org/gnome/shell/theme/gnome-shell.css");') and not re.search(r"@[A-Z0-9_]+@", css) and css.count("{") == css.count("}")
+assert css.startswith("/* theme: mocha") and "@import" not in css and not re.search(r"@[A-Z0-9_]+@", css) and css.count("{") == css.count("}")
+for sel in ("#overviewGroup { background-color: #1e1e2e; }", ".overview-tile:hover", ".app-grid-running-dot { background-color: #89b4fa; }", "#dash .dash-background", ".app-folder {"):
+    assert sel in css, sel
+for needle in ("org.gnome.shell.extensions.dash-to-dock background-color '#1e1e2e'", "org.gnome.shell.extensions.dash-to-dock custom-theme-running-dots-color '#89b4fa'",
+               "org.gnome.shell.extensions.user-theme name theme-mocha"):
+    assert needle in log, needle
 gtk = (cfg / "gtk-4.0/gtk.css").read_text()
 assert "@define-color accent_bg_color #89b4fa" in gtk and "@define-color window_bg_color #1e1e2e" in gtk and gtk == (cfg / "gtk-3.0/gtk.css").read_text()
 hook = (cfg / "colson-arch-theme/active-nvim.lua").read_text()
@@ -187,6 +193,7 @@ assert not list((F / ".local/share/icons").glob("colson-arch-theme-papirus-*"))
 log = (F / "calls.log").read_text()
 for k in ("gtk-theme", "icon-theme", "cursor-theme"):
     assert f"gsettings reset org.gnome.desktop.interface {k}" in log, k
-print("uninstall: every file back to how it was, overlays gone, settings reset — OK")
+assert "reset org.gnome.shell.extensions.dash-to-dock custom-background-color" in log and "org.gnome.shell.extensions.user-theme name " in log
+print("uninstall: every file back to how it was, overlays gone, settings + dock reset — OK")
 EOF
 echo "isolated suite: all green"
